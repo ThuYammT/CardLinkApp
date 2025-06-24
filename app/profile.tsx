@@ -101,10 +101,7 @@ export default function Profile() {
         <TouchableOpacity onPress={() => router.replace('/home')}>
           <FontAwesome name="home" size={24} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.replace('/menu')}>
-          <FontAwesome name="bars" size={24} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.replace('/scan')}>
+        <TouchableOpacity onPress={() => router.replace('/contact')}>
           <FontAwesome name="id-card" size={24} />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.replace('/calendar')}>
