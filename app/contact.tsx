@@ -1,111 +1,208 @@
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { router } from "expo-router";
-import { useLayoutEffect } from "react";
-import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { useEffect, useLayoutEffect, useState } from "react";
+import {
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
- 
+import * as SecureStore from "expo-secure-store";
+import { Menu, Provider } from "react-native-paper";
+
+// ✅ Contact type
+type Contact = {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  company: string;
+  website?: string;
+  notes?: string;
+  isFavorite: boolean;
+  createdAt?: string;
+};
+
 export default function Contacts() {
   const navigation = useNavigation();
- 
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [visibleMenuId, setVisibleMenuId] = useState<string | null>(null);
+
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, []);
- 
-  const contacts = [
-    {
-      name: "Hong Eunchae",
-      phone: "000 000 000",
-      email: "vocalqueen@gmail.com",
-      company: "KQ Entertainment",
-      isFavorite: true,
-    },
-    {
-      name: "Jang Wonyoung",
-      phone: "000 000 000",
-      email: "foreveryoung@gmail.com",
-      company: "Starship Company",
-      isFavorite: true,
-    },
-    {
-      name: "Miyawaki Sakura",
-      phone: "000 000 000",
-      email: "yumenokissme@gmail.com",
-      company: "Sony Records Label",
-      isFavorite: false,
-    },
-  ];
- 
+
+  useEffect(() => {
+    const fetchContacts = async () => {
+      const token = await SecureStore.getItemAsync("userToken");
+      try {
+        const res = await fetch("https://cardlink.onrender.com/api/contacts", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (res.ok) setContacts(data);
+        else console.error("Fetch error:", data.message);
+      } catch (err) {
+        console.error("Error loading contacts:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchContacts();
+  }, []);
+
+  const confirmDelete = (contactId: string) => {
+    Alert.alert("Delete Contact", "Are you sure you want to delete this contact?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => handleDelete(contactId),
+      },
+    ]);
+  };
+
+  const handleDelete = async (contactId: string) => {
+    const token = await SecureStore.getItemAsync("userToken");
+    try {
+      const res = await fetch(`https://cardlink.onrender.com/api/contacts/${contactId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        setContacts((prev) => prev.filter((c) => c._id !== contactId));
+        Alert.alert("Deleted", "Contact successfully deleted.");
+      } else {
+        console.error("Delete failed");
+        Alert.alert("Error", "Failed to delete contact.");
+      }
+    } catch (err) {
+      console.error("Error deleting contact:", err);
+      Alert.alert("Error", "Something went wrong.");
+    }
+  };
+
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      {/* Header */}
-      <View className="bg-blue-900 px-4 py-6 flex-row justify-between items-center">
-        <Text className="text-white text-2xl font-nunito">Contacts</Text>
-        <FontAwesome name="filter" size={24} color="white" />
-      </View>
- 
-      {/* Contact List */}
-      <ScrollView className="px-4 mt-4 mb-24">
-        {contacts.map((c, i) => (
-          <View
-            key={i}
-            className="bg-blue-100 rounded-2xl p-4 mb-4 shadow-md"
+    <Provider>
+      <SafeAreaView className="flex-1 bg-white">
+        <View className="bg-blue-900 px-4 py-6 flex-row justify-between items-center">
+          <Text className="text-white text-2xl font-nunito">Contacts</Text>
+          <FontAwesome name="filter" size={24} color="white" />
+        </View>
+
+        <ScrollView className="px-4 mt-4 mb-24">
+          {loading ? (
+            <ActivityIndicator size="large" color="blue" />
+          ) : contacts.length === 0 ? (
+            <Text className="text-center text-gray-600 font-nunito">
+              No contacts found.
+            </Text>
+          ) : (
+            contacts.map((c) => (
+              <TouchableOpacity
+                key={c._id}
+                onPress={() =>
+                  router.push({
+                    pathname: "/contact-detail",
+                    params: {
+                      _id: c._id,
+                      firstName: c.firstName,
+                      lastName: c.lastName,
+                      phone: c.phone,
+                      email: c.email,
+                      company: c.company,
+                      website: c.website || "",
+                      notes: c.notes || "",
+                      createdAt: c.createdAt || "",
+                      isFavorite: String(c.isFavorite),
+                    },
+                  })
+                }
+              >
+                <View className="bg-blue-100 rounded-2xl p-4 mb-4 shadow-md">
+                  <View className="flex-row justify-between items-center mb-2">
+                    <View className="flex-row items-center">
+                      <FontAwesome name="user" size={20} />
+                      <Text className="ml-2 font-nunito text-base">
+                        {c.firstName} {c.lastName}
+                      </Text>
+                    </View>
+
+                    {/* ⭐ Star + 3-dot Menu */}
+                    <Menu
+                      visible={visibleMenuId === c._id}
+                      onDismiss={() => setVisibleMenuId(null)}
+                      anchor={
+                        <TouchableOpacity onPress={() => setVisibleMenuId(c._id)}>
+                          <MaterialIcons name="more-vert" size={20} />
+                        </TouchableOpacity>
+                      }
+                    >
+                      <Menu.Item
+                        onPress={() => {
+                          setVisibleMenuId(null);
+                          confirmDelete(c._id);
+                        }}
+                        title="Delete Contact"
+                      />
+                    </Menu>
+                  </View>
+
+                  <View className="flex-row items-center mb-1">
+                    <FontAwesome name="phone" size={16} />
+                    <Text className="ml-2 font-nunito text-sm">{c.phone}</Text>
+                  </View>
+
+                  <View className="flex-row items-center mb-1">
+                    <MaterialIcons name="email" size={16} />
+                    <Text className="ml-2 font-nunito text-sm">{c.email}</Text>
+                  </View>
+
+                  <View className="flex-row items-center">
+                    <FontAwesome name="briefcase" size={16} />
+                    <Text className="ml-2 font-nunito text-sm">{c.company}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+        </ScrollView>
+
+        <View className="absolute bottom-20 left-0 right-0 items-center">
+          <TouchableOpacity
+            onPress={() => router.push("/add-contact")}
+            className="bg-blue-900 rounded-full px-10 py-4 flex-row items-center"
           >
-            <View className="flex-row justify-between items-center mb-2">
-              <View className="flex-row items-center">
-                <FontAwesome name="user" size={20} />
-                <Text className="ml-2 font-nunito text-base">{c.name}</Text>
-              </View>
-              <FontAwesome
-                name={c.isFavorite ? "star" : "star-o"}
-                size={20}
-                color={c.isFavorite ? "gold" : "black"}
-              />
-            </View>
- 
-            <View className="flex-row items-center mb-1">
-              <FontAwesome name="phone" size={16} />
-              <Text className="ml-2 font-nunito text-sm">{c.phone}</Text>
-            </View>
- 
-            <View className="flex-row items-center mb-1">
-              <MaterialIcons name="email" size={16} />
-              <Text className="ml-2 font-nunito text-sm">{c.email}</Text>
-            </View>
- 
-            <View className="flex-row items-center">
-              <FontAwesome name="briefcase" size={16} />
-              <Text className="ml-2 font-nunito text-sm">{c.company}</Text>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
- 
-      {/* Add Button */}
-      <View className="absolute bottom-20 left-0 right-0 items-center">
-        <TouchableOpacity className="bg-blue-900 rounded-full px-10 py-4 flex-row items-center">
-          <FontAwesome name="plus" size={18} color="white" />
-          <Text className="text-white text-base ml-2 font-nunito">Add</Text>
-        </TouchableOpacity>
-      </View>
- 
-      {/* Bottom Nav Bar */}
-      <View className="absolute bottom-0 left-0 right-0 bg-white py-3 flex-row justify-around border-t border-gray-200">
-              <TouchableOpacity onPress={() => router.replace('/home')}>
-                <FontAwesome name="home" size={24} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.replace('/contact')}>
-                <FontAwesome name="id-card" size={24} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.replace('/calendar')}>
-                <FontAwesome name="calendar" size={24} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.replace('/profile')}>
-                <FontAwesome name="user" size={24} />
-              </TouchableOpacity>
-            </View>
-    </SafeAreaView>
+            <FontAwesome name="plus" size={18} color="white" />
+            <Text className="text-white text-base ml-2 font-nunito">Add</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View className="absolute bottom-0 left-0 right-0 bg-white py-3 flex-row justify-around border-t border-gray-200">
+          <TouchableOpacity onPress={() => router.replace("/home")}>
+            <FontAwesome name="home" size={24} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.replace("/contact")}>
+            <FontAwesome name="id-card" size={24} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.replace("/calendar")}>
+            <FontAwesome name="calendar" size={24} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.replace("/profile")}>
+            <FontAwesome name="user" size={24} />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Provider>
   );
 }
- 
- 
