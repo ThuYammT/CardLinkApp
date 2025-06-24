@@ -1,50 +1,28 @@
-# Welcome to your Expo app 👋
+# 💼 CardLink - The Future of Business Cards
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+![CardLink Logo](./assets/logo.png)
 
-## Get started
+CardLink is a smart mobile application designed to revolutionize how professionals manage business cards. Say goodbye to bulky card holders and hello to seamless digital contact management powered by **OCR**, **NLP**, and a clean intuitive UI.
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## 🚀 Features
 
-2. Start the app
+- 📷 **Scan Business Cards** with your phone camera or upload from gallery
+- 🧠 **Extract Key Info** using Google ML Kit + NLP (BERT + regex fallback)
+- 🗂 **Organize Contacts** with tags, filters, and search
+- 📝 **Add Notes & Reminders** for each contact
+- 📅 **Schedule Appointments** directly in the app
+- 🔒 **Secure & Scalable Backend** using Node.js + MongoDB
 
-   ```bash
-   npx expo start
-   ```
+---
 
-In the output, you'll find options to open the app in a
+## 🧠 Problem We Solve
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Physical cards are **easy to lose** and **hard to organize**
+- Manual entry is **time-consuming** and **error-prone**
+- No easy way to **search**, **tag**, or **follow-up** with contacts
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+> **90.6%** of our survey participants said they prefer digital business cards!
 
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+---
