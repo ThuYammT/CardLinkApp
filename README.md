@@ -1,4 +1,4 @@
-# 💼 CardLink - The Future of Business Cards
+# CardLink - The Future of Business Cards
 
 ![CardLink Logo](./assets/logo.png)
 
@@ -6,18 +6,18 @@ CardLink is a smart mobile application designed to revolutionize how professiona
 
 ---
 
-## 🚀 Features
+## Features
 
-- 📷 **Scan Business Cards** with your phone camera or upload from gallery
-- 🧠 **Extract Key Info** using Google ML Kit + NLP (BERT + regex fallback)
-- 🗂 **Organize Contacts** with tags, filters, and search
-- 📝 **Add Notes & Reminders** for each contact
-- 📅 **Schedule Appointments** directly in the app
-- 🔒 **Secure & Scalable Backend** using Node.js + MongoDB
+-  **Scan Business Cards** with your phone camera or upload from gallery
+-  **Extract Key Info** using Google ML Kit + NLP (BERT + regex fallback)
+-  **Organize Contacts** with tags, filters, and search
+-  **Add Notes & Reminders** for each contact
+-  **Schedule Appointments** directly in the app
+-  **Secure & Scalable Backend** using Node.js + MongoDB
 
 ---
 
-## 🧠 Problem We Solve
+##  Problem We Solve
 
 - Physical cards are **easy to lose** and **hard to organize**
 - Manual entry is **time-consuming** and **error-prone**
