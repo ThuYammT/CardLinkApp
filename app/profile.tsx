@@ -1,14 +1,18 @@
 import { FontAwesome } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import { Image, SafeAreaView, Text, TouchableOpacity, View } from "react-native";
 import * as SecureStore from "expo-secure-store";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 
 export const options = {
   headerShown: false,
 };
 
 export default function Profile() {
+  const navigation = useNavigation();
+    useLayoutEffect(() => {
+      navigation.setOptions({ headerShown: false });
+    }, []);
   const router = useRouter();
   const [user, setUser] = useState({ email: '', name: '', avatar: '' });
 
@@ -42,9 +46,6 @@ export default function Profile() {
     <SafeAreaView className="flex-1 bg-white">
       {/* Top Bar */}
       <View className="bg-blue-900 px-4 py-8 flex-row items-center">
-        <TouchableOpacity onPress={() => router.back()}>
-          <FontAwesome name="arrow-left" size={20} color="white" />
-        </TouchableOpacity>
         <Text className="text-white text-xl font-nunito ml-3">Profile</Text>
       </View>
 
@@ -98,19 +99,19 @@ export default function Profile() {
 
       {/* Bottom Nav */}
       <View className="absolute bottom-0 left-0 right-0 bg-white py-3 flex-row justify-around border-t border-gray-200">
-        <TouchableOpacity onPress={() => router.replace('/home')}>
-          <FontAwesome name="home" size={24} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.replace('/contact')}>
-          <FontAwesome name="id-card" size={24} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.replace('/calendar')}>
-          <FontAwesome name="calendar" size={24} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.replace('/profile')}>
-          <FontAwesome name="user" size={24} />
-        </TouchableOpacity>
-      </View>
+                <TouchableOpacity onPress={() => router.replace("/home")}>
+                  <FontAwesome name="home" size={24} color="#11224E" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => router.replace("/contact")}>
+                  <FontAwesome name="id-card" size={24} color="#11224E" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => router.replace("/calendar")}>
+                  <FontAwesome name="calendar" size={24} color="#11224E" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => router.replace("/profile")}>
+                  <FontAwesome name="user" size={24} color="#11224E" />
+                </TouchableOpacity>
+              </View>
     </SafeAreaView>
   );
 }

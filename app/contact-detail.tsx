@@ -1,9 +1,11 @@
 import { View, Text, TouchableOpacity, ScrollView, Alert } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
 import * as Contacts from "expo-contacts";
+import { useLayoutEffect } from "react";
 
 export default function ContactDetail() {
+  
   const router = useRouter();
   const {
     firstName,

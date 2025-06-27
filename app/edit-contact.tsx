@@ -13,10 +13,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
 
 export default function EditContactScreen() {
+ 
+
   const navigation = useNavigation();
   const router = useRouter();
   const params = useLocalSearchParams();
-
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: false });
+  }, []);
   const [contact, setContact] = useState({
     firstName: String(params.firstName || ""),
     lastName: String(params.lastName || ""),
