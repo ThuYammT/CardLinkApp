@@ -1,11 +1,23 @@
-import { View, Text, TouchableOpacity, ScrollView, Alert } from "react-native";
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+} from "react-native";
+import {
+  useLocalSearchParams,
+  useNavigation,
+  useRouter,
+} from "expo-router";
+import {
+  FontAwesome,
+  MaterialIcons,
+} from "@expo/vector-icons";
 import * as Contacts from "expo-contacts";
 import { useLayoutEffect } from "react";
 
 export default function ContactDetail() {
-  
   const router = useRouter();
   const {
     firstName,
@@ -22,31 +34,50 @@ export default function ContactDetail() {
   const initials = `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
 
   const handleSaveToDevice = async () => {
-  const { status } = await Contacts.requestPermissionsAsync();
-  if (status !== "granted") {
-    Alert.alert("Permission Denied", "Cannot access device contacts.");
-    return;
-  }
+    const { status } = await Contacts.requestPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Denied", "Cannot access device contacts.");
+      return;
+    }
 
-  const contact = {
-    contactType: Contacts.ContactTypes.Person, // ✅ REQUIRED
-    firstName: String(firstName || ""),
-    lastName: String(lastName || ""),
-    company: String(company || ""),
-    emails: email ? [{ label: "work", email: String(email) }] : [],
-    phoneNumbers: phone ? [{ label: "mobile", number: String(phone) }] : [],
-    note: String(notes || ""),
+    const contact = {
+      contactType: Contacts.ContactTypes.Person,
+      firstName: String(firstName || ""),
+      lastName: String(lastName || ""),
+      company: String(company || ""),
+      emails: email ? [{ label: "work", email: String(email) }] : [],
+      phoneNumbers: phone ? [{ label: "mobile", number: String(phone) }] : [],
+      note: String(notes || ""),
+    };
+
+    try {
+      await Contacts.addContactAsync(contact as Contacts.Contact);
+      Alert.alert("Saved", "Contact saved to your phone.");
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Error", "Could not save contact.");
+    }
   };
 
-  try {
-    await Contacts.addContactAsync(contact as Contacts.Contact); // ✅ Type cast
-    Alert.alert("Saved", "Contact saved to your phone.");
-  } catch (err) {
-    console.error(err);
-    Alert.alert("Error", "Could not save contact.");
-  }
-};
-
+  const DetailItem = ({
+    icon,
+    label,
+    value,
+  }: {
+    icon: any;
+    label: string;
+    value?: string;
+  }) => (
+    <View className="mb-3">
+      <Text className="font-nunito text-gray-600 mb-1">{label}</Text>
+      <View className="bg-white p-3 rounded-lg flex-row items-center">
+        <FontAwesome name={icon} size={16} color="#11224E" />
+        <Text className="ml-2 text-sm font-nunito text-gray-800">
+          {value || "—"}
+        </Text>
+      </View>
+    </View>
+  );
 
   return (
     <ScrollView className="flex-1 bg-white">
@@ -60,20 +91,20 @@ export default function ContactDetail() {
 
       {/* Profile Card */}
       <View className="bg-blue-100 rounded-xl p-6 items-center mt-6 mx-4 shadow">
-        <View className="bg-white w-16 h-16 rounded-full items-center justify-center shadow">
-          <Text className="text-lg font-bold">{initials}</Text>
+        <View className="bg-white w-20 h-20 rounded-full items-center justify-center shadow">
+          <Text className="text-xl font-bold text-blue-900">{initials}</Text>
         </View>
-        <Text className="mt-4 text-lg font-semibold font-nunito">
+        <Text className="mt-4 text-xl font-bold text-blue-900 font-nunito">
           {firstName} {lastName}
         </Text>
-        <Text className="text-gray-700 font-nunito">{phone}</Text>
+        <Text className="text-gray-700 font-nunito text-sm">{phone}</Text>
       </View>
 
       {/* Buttons */}
-      <View className="flex-row justify-around mt-4">
+      <View className="flex-row justify-around mt-6 px-6">
         <TouchableOpacity className="items-center" onPress={handleSaveToDevice}>
           <FontAwesome name="phone" size={20} color="#1996fc" />
-          <Text className="text-[#1996fc] mt-1 font-nunito">Save to contact</Text>
+          <Text className="text-[#1996fc] mt-1 font-nunito">Save to Phone</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -102,24 +133,16 @@ export default function ContactDetail() {
       {/* Contact Info */}
       <View className="bg-blue-100 mt-6 mx-4 p-4 rounded-xl">
         <Text className="text-center text-sm text-gray-600 mb-3">
-          Card saved at : {createdAt ? new Date(createdAt as string).toLocaleString() : "N/A"}
+          Card saved at :{" "}
+          {createdAt
+            ? new Date(createdAt as string).toLocaleString()
+            : "N/A"}
         </Text>
 
-        <Text className="font-nunito text-sm text-gray-600">Email</Text>
-        <Text className="bg-white p-2 rounded mb-2 text-sm font-nunito">{email || "—"}</Text>
-
-        <Text className="font-nunito text-sm text-gray-600">Company</Text>
-        <Text className="bg-white p-2 rounded mb-2 text-sm font-nunito">{company || "—"}</Text>
-
-        <Text className="font-nunito text-sm text-gray-600">Website</Text>
-        <Text className="bg-white p-2 rounded mb-2 text-sm font-nunito">
-          {website || "—"}
-        </Text>
-
-        <Text className="font-nunito text-sm text-gray-600">Additional Note</Text>
-        <Text className="bg-white p-2 rounded mb-2 text-sm font-nunito h-20">
-          {notes || "—"}
-        </Text>
+        <DetailItem icon="envelope" label="Email" value={email as string} />
+        <DetailItem icon="building" label="Company" value={company as string} />
+        <DetailItem icon="globe" label="Website" value={website as string} />
+        <DetailItem icon="sticky-note" label="Notes" value={notes as string} />
       </View>
     </ScrollView>
   );

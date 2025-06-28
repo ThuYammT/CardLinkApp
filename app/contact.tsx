@@ -107,73 +107,90 @@ export default function Contacts() {
           </Text>
         ) : (
           contacts.map((c) => (
-            <TouchableOpacity
-              key={c._id}
-              onPress={() =>
-                router.push({
-                  pathname: "/contact-detail",
-                  params: {
-                    _id: c._id,
-                    firstName: c.firstName,
-                    lastName: c.lastName,
-                    phone: c.phone,
-                    email: c.email,
-                    company: c.company,
-                    website: c.website || "",
-                    notes: c.notes || "",
-                    createdAt: c.createdAt || "",
-                    isFavorite: String(c.isFavorite),
-                  },
-                })
-              }
-            >
-              <View className="bg-blue-100 rounded-2xl p-4 mb-4 shadow-md">
-                <View className="flex-row justify-between items-center mb-2">
-                  <View className="flex-row items-center">
-                    <FontAwesome name="user" size={20} />
-                    <Text className="ml-2 font-nunito text-base">
-                      {c.firstName} {c.lastName}
-                    </Text>
-                  </View>
+  <TouchableOpacity
+    key={c._id}
+    onPress={() =>
+      router.push({
+        pathname: "/contact-detail",
+        params: {
+          _id: c._id,
+          firstName: c.firstName,
+          lastName: c.lastName,
+          phone: c.phone,
+          email: c.email,
+          company: c.company,
+          website: c.website || "",
+          notes: c.notes || "",
+          createdAt: c.createdAt || "",
+          isFavorite: String(c.isFavorite),
+        },
+      })
+    }
+  >
+    <View className="bg-white rounded-2xl px-4 py-4 mb-4 shadow-lg border border-blue-100">
+      <View className="flex-row justify-between items-start">
+        {/* Avatar & Name */}
+        <View className="flex-row items-center">
+          <View className="w-10 h-10 bg-blue-200 rounded-full justify-center items-center">
+            <Text className="text-white font-bold text-sm">
+              {c.firstName[0]}
+              {c.lastName[0]}
+            </Text>
+          </View>
+          <View className="ml-3">
+            <Text className="text-xl font-bold text-blue-900 font-nunito">
+              {c.firstName} {c.lastName}
+            </Text>
+            <Text className="text-xs text-gray-500">{c.company}</Text>
+          </View>
+        </View>
 
-                  <View className="relative">
-                    <TouchableOpacity onPress={() =>
-                      setVisibleMenuId(visibleMenuId === c._id ? null : c._id)
-                    }>
-                      <MaterialIcons name="more-vert" size={20} />
-                    </TouchableOpacity>
+        {/* 3-dot Menu */}
+        <View className="relative">
+          <TouchableOpacity
+            onPress={() =>
+              setVisibleMenuId(visibleMenuId === c._id ? null : c._id)
+            }
+          >
+            <MaterialIcons name="more-vert" size={20} color="#444" />
+          </TouchableOpacity>
 
-                    {visibleMenuId === c._id && (
-                  <View className="absolute right-0 mt-2 bg-white rounded shadow p-2 z-10 w-32">
-                    <TouchableOpacity onPress={() => {
-                      setVisibleMenuId(null);
-                      confirmDelete(c._id);
-                    }}>
-                      <Text className="text-red-600 font-nunito text-sm">Delete Contact</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+          {visibleMenuId === c._id && (
+            <View className="absolute right-0 mt-2 bg-white rounded shadow p-2 z-10 w-36">
+              <TouchableOpacity
+                onPress={() => {
+                  setVisibleMenuId(null);
+                  confirmDelete(c._id);
+                }}
+              >
+                <Text className="text-red-600 font-nunito text-sm">
+                  Delete Contact
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
 
-                  </View>
-                </View>
+      {/* Contact Info */}
+      <View className="mt-3 space-y-1">
+        <View className="flex-row items-center">
+          <FontAwesome name="phone" size={14} color="#1996fc" />
+          <Text className="ml-2 text-sm text-gray-800">{c.phone}</Text>
+        </View>
+        <View className="flex-row items-center">
+          <MaterialIcons name="email" size={14} color="#1996fc" />
+          <Text className="ml-2 text-sm text-gray-800">{c.email}</Text>
+        </View>
+        <View className="flex-row items-center">
+          <FontAwesome name="briefcase" size={14} color="#1996fc" />
+          <Text className="ml-2 text-sm text-gray-800">{c.company}</Text>
+        </View>
+      </View>
+    </View>
+  </TouchableOpacity>
+))
 
-                <View className="flex-row items-center mb-1">
-                  <FontAwesome name="phone" size={16} />
-                  <Text className="ml-2 font-nunito text-sm">{c.phone}</Text>
-                </View>
-
-                <View className="flex-row items-center mb-1">
-                  <MaterialIcons name="email" size={16} />
-                  <Text className="ml-2 font-nunito text-sm">{c.email}</Text>
-                </View>
-
-                <View className="flex-row items-center">
-                  <FontAwesome name="briefcase" size={16} />
-                  <Text className="ml-2 font-nunito text-sm">{c.company}</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))
         )}
       </ScrollView>
 
