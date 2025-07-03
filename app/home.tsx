@@ -1,6 +1,6 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { router, useNavigation } from 'expo-router';
+import { router, useNavigation,usePathname } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
@@ -16,6 +16,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
+  const pathname = usePathname();
+
+  const isActive = (route: string) => pathname === route;
   const navigation = useNavigation();
 
   useLayoutEffect(() => {
@@ -97,7 +100,7 @@ export default function HomeScreen() {
       });
       const data = await res.json();
       if (Array.isArray(data)) {
-        setRecentContacts(data.slice(0, 2));
+        setRecentContacts(data.slice(0, 4));
       } else {
         console.error('Invalid data format:', data);
       }
@@ -134,6 +137,8 @@ export default function HomeScreen() {
       console.log('Gallery image URI:', result.assets[0].uri);
     }
   };
+
+
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -183,53 +188,93 @@ export default function HomeScreen() {
       </View>
 
       {/* Recent Section */}
-      <View className="px-4 py-2 flex-row justify-between items-center">
+      <View className="px-4 py-3 flex-row justify-between items-center">
         <Text className="text-lg font-semibold text-gray-700">Recent</Text>
         <TouchableOpacity onPress={() => router.push('/contact')}>
           <Text className="text-blue-900 font-medium">View All</Text>
         </TouchableOpacity>
       </View>
-
-      <ScrollView className="px-4 mb-28">
-        {recentContacts.map((c) => (
-          <View key={c._id} className="bg-blue-100 rounded-2xl p-4 mb-4 shadow-md">
-            <View className="flex-row items-center mb-2">
-              <FontAwesome name="user" size={20} color="#11224E" />
-              <Text className="ml-2 text-base text-gray-800">
-                {c.firstName} {c.lastName}
+      {/* ouk ka phyu phyu gye */}
+      <ScrollView className="px-4 mb-0"> 
+  {recentContacts.map((c) => (
+    <TouchableOpacity
+      key={c._id}
+      onPress={() =>
+        router.push({
+          pathname: "/contact-detail",
+          params: {
+            _id: c._id,
+            firstName: c.firstName,
+            lastName: c.lastName,
+            phone: c.phone,
+            email: c.email,
+            company: c.company,
+            website: "", // if needed
+            notes: "",    // if needed
+            createdAt: "", // optional if not available
+            isFavorite: "false", // default if not used here
+          },
+        })
+      }
+    >
+      <View className="bg-white rounded-2xl px-4 py-4 mb-4 shadow-lg border border-blue-100">
+        <View className="flex-row justify-between items-start">
+          {/* Avatar & Name */}
+          <View className="flex-row items-center">
+            <View className="w-10 h-10 bg-blue-200 rounded-full justify-center items-center">
+              <Text className="text-white font-bold text-sm">
+                {c.firstName[0]}
+                {c.lastName[0]}
               </Text>
             </View>
-            <View className="flex-row items-center mb-1">
-              <FontAwesome name="phone" size={16} color="#11224E" />
-              <Text className="ml-2 text-sm text-gray-700">{c.phone}</Text>
-            </View>
-            <View className="flex-row items-center mb-1">
-              <FontAwesome name="envelope" size={16} color="#11224E" />
-              <Text className="ml-2 text-sm text-gray-700">{c.email}</Text>
-            </View>
-            <View className="flex-row items-center">
-              <FontAwesome name="briefcase" size={16} color="#11224E" />
-              <Text className="ml-2 text-sm text-gray-700">{c.company}</Text>
+            <View className="ml-3">
+              <Text className="text-xl font-bold text-blue-900 font-nunito">
+                {c.firstName} {c.lastName}
+              </Text>
+              <Text className="text-xs text-gray-500">{c.company}</Text>
             </View>
           </View>
-        ))}
-      </ScrollView>
+        </View>
 
-      {/* Bottom Navigation */}
-      <View className="absolute bottom-0 left-0 right-0 bg-white py-3 flex-row justify-around border-t border-gray-200">
-        <TouchableOpacity onPress={() => router.replace('/home')}>
-          <FontAwesome name="home" size={24} color="#11224E" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.replace('/contact')}>
-          <FontAwesome name="id-card" size={24} color="#11224E" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.replace('/calendar')}>
-          <FontAwesome name="calendar" size={24} color="#11224E" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.replace('/profile')}>
-          <FontAwesome name="user" size={24} color="#11224E" />
-        </TouchableOpacity>
+        {/* Contact Info */}
+        <View className="mt-3 space-y-1">
+          <View className="flex-row items-center">
+            <FontAwesome name="phone" size={14} color="#1996fc" />
+            <Text className="ml-2 text-sm text-gray-800">{c.phone}</Text>
+          </View>
+          <View className="flex-row items-center">
+            <MaterialIcons name="email" size={14} color="#1996fc" />
+            <Text className="ml-2 text-sm text-gray-800">{c.email}</Text>
+          </View>
+          <View className="flex-row items-center">
+            <FontAwesome name="briefcase" size={14} color="#1996fc" />
+            <Text className="ml-2 text-sm text-gray-800">{c.company}</Text>
+          </View>
+        </View>
       </View>
+    </TouchableOpacity>
+  ))}
+</ScrollView>
+
+ 
+      {/* Bottom Navigation */}
+      <View className="absolute bottom-5 left-0 right-0 bg-white py-3 flex-row justify-around border-t border-gray-200 ">
+       <TouchableOpacity onPress={() => router.replace('/home')}>
+        <FontAwesome name="home" size={24} color={isActive('/home') ? '#1996fc' : '#11224E'} />
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={() => router.replace('/contact')}>
+        <FontAwesome name="id-card" size={24} color={isActive('/contact') ? '#1996fc' : '#11224E'} />
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={() => router.replace('/calendar')}>
+        <FontAwesome name="calendar" size={24} color={isActive('/calendar') ? '#1996fc' : '#11224E'} />
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={() => router.replace('/profile')}>
+        <FontAwesome name="user" size={24} color={isActive('/profile') ? '#1996fc' : '#11224E'} />
+      </TouchableOpacity>
+    </View>
     </SafeAreaView>
   );
 }
