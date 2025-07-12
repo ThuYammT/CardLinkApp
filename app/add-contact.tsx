@@ -11,24 +11,26 @@ import { useNavigation, useRouter } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
- 
+
 export default function AddContactScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const [contact, setContact] = useState({
     firstName: "",
     lastName: "",
+    nickname: "",   // ✅ new field
+    position: "",   // ✅ new field
     phone: "",
     email: "",
     company: "",
     website: "",
     notes: "",
   });
- 
+
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, []);
- 
+
   const handleSave = async () => {
     const token = await SecureStore.getItemAsync("userToken");
     try {
@@ -40,7 +42,7 @@ export default function AddContactScreen() {
         },
         body: JSON.stringify(contact),
       });
- 
+
       const data = await res.json();
       if (res.ok) {
         Alert.alert("Saved", "Contact added successfully!");
@@ -52,7 +54,7 @@ export default function AddContactScreen() {
       Alert.alert("Network Error", "Could not connect to server");
     }
   };
- 
+
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="bg-blue-900 px-6 py-4 flex-row items-center">
@@ -61,7 +63,7 @@ export default function AddContactScreen() {
         </TouchableOpacity>
         <Text className="text-white text-xl font-nunito ml-4">Add</Text>
       </View>
- 
+
       <ScrollView contentContainerStyle={{ padding: 20, flexGrow: 1 }}>
         <View className="bg-blue-100 rounded-2xl p-4">
           {/* Name */}
@@ -89,7 +91,25 @@ export default function AddContactScreen() {
               />
             </View>
           </View>
- 
+
+          {/* Nickname */}
+          <Text className="font-nunito mt-4 mb-1">Nickname</Text>
+          <TextInput
+            placeholder="Nickname"
+            value={contact.nickname}
+            onChangeText={(val) => setContact({ ...contact, nickname: val })}
+            className="bg-white rounded px-3 py-2"
+          />
+
+          {/* Position */}
+          <Text className="font-nunito mt-4 mb-1">Position</Text>
+          <TextInput
+            placeholder="Position"
+            value={contact.position}
+            onChangeText={(val) => setContact({ ...contact, position: val })}
+            className="bg-white rounded px-3 py-2"
+          />
+
           <Text className="font-nunito mt-4 mb-1">Phone Number</Text>
           <TextInput
             placeholder="Phone Number"
@@ -97,7 +117,7 @@ export default function AddContactScreen() {
             onChangeText={(val) => setContact({ ...contact, phone: val })}
             className="bg-white rounded px-3 py-2"
           />
- 
+
           <Text className="font-nunito mt-4 mb-1">Email</Text>
           <TextInput
             placeholder="Email"
@@ -105,7 +125,7 @@ export default function AddContactScreen() {
             onChangeText={(val) => setContact({ ...contact, email: val })}
             className="bg-white rounded px-3 py-2"
           />
- 
+
           <Text className="font-nunito mt-4 mb-1">Company</Text>
           <TextInput
             placeholder="Company"
@@ -113,7 +133,7 @@ export default function AddContactScreen() {
             onChangeText={(val) => setContact({ ...contact, company: val })}
             className="bg-white rounded px-3 py-2"
           />
- 
+
           <Text className="font-nunito mt-4 mb-1">Website</Text>
           <TextInput
             placeholder="Website"
@@ -121,7 +141,7 @@ export default function AddContactScreen() {
             onChangeText={(val) => setContact({ ...contact, website: val })}
             className="bg-white rounded px-3 py-2"
           />
- 
+
           <Text className="font-nunito mt-4 mb-1">Additional Notes</Text>
           <TextInput
             placeholder="Notes"
@@ -133,7 +153,7 @@ export default function AddContactScreen() {
             className="bg-white rounded px-3 py-2 h-24"
           />
         </View>
- 
+
         <TouchableOpacity
           className="mt-8 bg-blue-900 rounded-full py-3 items-center"
           onPress={handleSave}

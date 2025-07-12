@@ -37,6 +37,8 @@ export default function HomeScreen() {
     phone: string;
     email: string;
     company: string;
+    website?: string;
+    notes?: string;
   };
 
   const [recentContacts, setRecentContacts] = useState<Contact[]>([]);
@@ -209,8 +211,8 @@ export default function HomeScreen() {
             phone: c.phone,
             email: c.email,
             company: c.company,
-            website: "", // if needed
-            notes: "",    // if needed
+            website: c.website || "",
+            notes: c.notes || "",   // if needed
             createdAt: "", // optional if not available
             isFavorite: "false", // default if not used here
           },
