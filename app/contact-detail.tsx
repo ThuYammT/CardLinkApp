@@ -42,19 +42,16 @@ export default function ContactDetail() {
   } = useLocalSearchParams();
 
   // Parse additional phones if passed as stringified JSON
-  const parsedAdditionalPhones: string[] =
-    typeof additionalPhones === "string"
-      ? (() => {
-          try {
-            const parsed = JSON.parse(additionalPhones);
-            return Array.isArray(parsed) ? parsed : [];
-          } catch {
-            return [];
-          }
-        })()
-      : Array.isArray(additionalPhones)
-      ? additionalPhones
-      : [];
+  // Parse comma-separated string into array
+const parsedAdditionalPhones: string[] =
+  typeof additionalPhones === "string"
+    ? additionalPhones
+        .split(",")
+        .map((s) => s.trim().replace(/^["']+|["']+$/g, ""))
+        .filter(Boolean)
+    : [];
+
+
 
   const initials = `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
 
@@ -169,7 +166,7 @@ export default function ContactDetail() {
                   notes,
                   nickname,
                   position,
-                  additionalPhones: JSON.stringify(parsedAdditionalPhones),
+                  additionalPhones: parsedAdditionalPhones.join(","),
                   _id: String(_id),
                 },
               })
