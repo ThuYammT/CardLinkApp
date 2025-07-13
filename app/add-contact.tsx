@@ -18,13 +18,14 @@ export default function AddContactScreen() {
   const [contact, setContact] = useState({
     firstName: "",
     lastName: "",
-    nickname: "",   // ✅ new field
-    position: "",   // ✅ new field
+    nickname: "",
+    position: "",
     phone: "",
     email: "",
     company: "",
     website: "",
     notes: "",
+    additionalPhones: [] as string[], // ✅ new
   });
 
   useLayoutEffect(() => {
@@ -33,6 +34,12 @@ export default function AddContactScreen() {
 
   const handleSave = async () => {
     const token = await SecureStore.getItemAsync("userToken");
+
+    const contactToSave = {
+      ...contact,
+      additionalPhones: contact.additionalPhones.join(","), // ✅ stringify
+    };
+
     try {
       const res = await fetch("https://cardlink.onrender.com/api/contacts", {
         method: "POST",
@@ -40,7 +47,7 @@ export default function AddContactScreen() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(contact),
+        body: JSON.stringify(contactToSave),
       });
 
       const data = await res.json();
@@ -53,6 +60,12 @@ export default function AddContactScreen() {
     } catch (err) {
       Alert.alert("Network Error", "Could not connect to server");
     }
+  };
+
+  const updateAdditionalPhone = (index: number, value: string) => {
+    const updatedPhones = [...contact.additionalPhones];
+    updatedPhones[index] = value;
+    setContact({ ...contact, additionalPhones: updatedPhones });
   };
 
   return (
@@ -92,7 +105,7 @@ export default function AddContactScreen() {
             </View>
           </View>
 
-          {/* Nickname */}
+          {/* Nickname & Position */}
           <Text className="font-nunito mt-4 mb-1">Nickname</Text>
           <TextInput
             placeholder="Nickname"
@@ -101,7 +114,6 @@ export default function AddContactScreen() {
             className="bg-white rounded px-3 py-2"
           />
 
-          {/* Position */}
           <Text className="font-nunito mt-4 mb-1">Position</Text>
           <TextInput
             placeholder="Position"
@@ -110,6 +122,7 @@ export default function AddContactScreen() {
             className="bg-white rounded px-3 py-2"
           />
 
+          {/* Main Phone */}
           <Text className="font-nunito mt-4 mb-1">Phone Number</Text>
           <TextInput
             placeholder="Phone Number"
@@ -118,7 +131,31 @@ export default function AddContactScreen() {
             className="bg-white rounded px-3 py-2"
           />
 
-          <Text className="font-nunito mt-4 mb-1">Email</Text>
+          {/* Additional Phones */}
+          <Text className="font-nunito mt-4 mb-1">Additional Phone(s)</Text>
+          {contact.additionalPhones.map((num, idx) => (
+            <TextInput
+              key={idx}
+              value={num}
+              onChangeText={(val) => updateAdditionalPhone(idx, val)}
+              placeholder={`Additional Phone ${idx + 1}`}
+              className="bg-white rounded px-3 py-2 mb-2"
+            />
+          ))}
+          <TouchableOpacity
+            className="mb-4"
+            onPress={() =>
+              setContact({
+                ...contact,
+                additionalPhones: [...contact.additionalPhones, ""],
+              })
+            }
+          >
+            <Text className="text-blue-700 font-nunito">+ Add another phone</Text>
+          </TouchableOpacity>
+
+          {/* Other Fields */}
+          <Text className="font-nunito mb-1">Email</Text>
           <TextInput
             placeholder="Email"
             value={contact.email}

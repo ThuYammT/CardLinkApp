@@ -173,7 +173,7 @@ export default function HomeScreen() {
         {/* Buttons */}
         <View className="flex-row justify-center mt-6 space-x-4">
           <TouchableOpacity
-            onPress={openCamera}
+            onPress={() => router.push("/scan")}
             className="w-[150px] h-[50px] bg-[#182C6B] rounded-full flex-row items-center justify-center space-x-2"
           >
             <FontAwesome name="qrcode" size={18} color="white" />
