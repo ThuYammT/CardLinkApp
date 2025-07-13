@@ -197,66 +197,72 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
       {/* ouk ka phyu phyu gye */}
-      <ScrollView className="px-4 mb-0"> 
-  {recentContacts.map((c) => (
-    <TouchableOpacity
-      key={c._id}
-      onPress={() =>
-        router.push({
-          pathname: "/contact-detail",
-          params: {
-            _id: c._id,
-            firstName: c.firstName,
-            lastName: c.lastName,
-            phone: c.phone,
-            email: c.email,
-            company: c.company,
-            website: c.website || "",
-            notes: c.notes || "",   // if needed
-            createdAt: "", // optional if not available
-            isFavorite: "false", // default if not used here
-          },
-        })
-      }
-    >
-      <View className="bg-white rounded-2xl px-4 py-4 mb-4 shadow-lg border border-blue-100">
-        <View className="flex-row justify-between items-start">
-          {/* Avatar & Name */}
-          <View className="flex-row items-center">
-            <View className="w-10 h-10 bg-blue-200 rounded-full justify-center items-center">
-              <Text className="text-white font-bold text-sm">
-                {c.firstName[0]}
-                {c.lastName[0]}
-              </Text>
-            </View>
-            <View className="ml-3">
-              <Text className="text-xl font-bold text-blue-900 font-nunito">
-                {c.firstName} {c.lastName}
-              </Text>
-              <Text className="text-xs text-gray-500">{c.company}</Text>
-            </View>
-          </View>
-        </View>
+      <ScrollView className="px-4 mb-0">
+  {recentContacts.map((c) => {
+    const initials = `${c.firstName?.[0] || ""}${c.lastName?.[0] || ""}`.toUpperCase();
 
-        {/* Contact Info */}
-        <View className="mt-3 space-y-1">
-          <View className="flex-row items-center">
-            <FontAwesome name="phone" size={14} color="#1996fc" />
-            <Text className="ml-2 text-sm text-gray-800">{c.phone}</Text>
+    return (
+      <TouchableOpacity
+        key={c._id}
+        onPress={() =>
+          router.push({
+            pathname: "/contact-detail",
+            params: {
+              _id: c._id,
+              firstName: c.firstName,
+              lastName: c.lastName,
+              phone: c.phone,
+              email: c.email,
+              company: c.company,
+              website: c.website || "",
+              notes: c.notes || "",
+              nickname: (c as any).nickname || "",
+              position: (c as any).position || "",
+              additionalPhones: (c as any).additionalPhones || "",
+              createdAt: (c as any).createdAt || "",
+            },
+          })
+        }
+      >
+        <View className="bg-white rounded-2xl px-4 py-4 mb-4 shadow-lg border border-blue-100">
+          <View className="flex-row justify-between items-start">
+            {/* Avatar & Name */}
+            <View className="flex-row items-center">
+              <View className="w-10 h-10 bg-blue-200 rounded-full justify-center items-center">
+                <Text className="text-white font-bold text-sm">
+                  {initials}
+                </Text>
+              </View>
+              <View className="ml-3">
+                <Text className="text-xl font-bold text-blue-900 font-nunito">
+                  {c.firstName} {c.lastName}
+                </Text>
+                <Text className="text-xs text-gray-500">{c.company}</Text>
+              </View>
+            </View>
           </View>
-          <View className="flex-row items-center">
-            <MaterialIcons name="email" size={14} color="#1996fc" />
-            <Text className="ml-2 text-sm text-gray-800">{c.email}</Text>
-          </View>
-          <View className="flex-row items-center">
-            <FontAwesome name="briefcase" size={14} color="#1996fc" />
-            <Text className="ml-2 text-sm text-gray-800">{c.company}</Text>
+
+          {/* Contact Info */}
+          <View className="mt-3 space-y-1">
+            <View className="flex-row items-center">
+              <FontAwesome name="phone" size={14} color="#1996fc" />
+              <Text className="ml-2 text-sm text-gray-800">{c.phone}</Text>
+            </View>
+            <View className="flex-row items-center">
+              <MaterialIcons name="email" size={14} color="#1996fc" />
+              <Text className="ml-2 text-sm text-gray-800">{c.email}</Text>
+            </View>
+            <View className="flex-row items-center">
+              <FontAwesome name="briefcase" size={14} color="#1996fc" />
+              <Text className="ml-2 text-sm text-gray-800">{c.company}</Text>
+            </View>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  ))}
+      </TouchableOpacity>
+    );
+  })}
 </ScrollView>
+
 
  
       {/* Bottom Navigation */}
