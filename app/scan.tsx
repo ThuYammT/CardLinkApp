@@ -54,7 +54,11 @@ export default function ScanScreen() {
         Alert.alert("Captured", "Image taken successfully!");
 
         // TODO: Send `photo.uri` to OCR pipeline or next screen
-        router.back();
+        router.push({
+        pathname: "/add-contact",
+        params: { imageUri: photo.uri },
+      });
+
       } catch (err) {
         Alert.alert("Error", "Failed to capture image.");
         console.error(err);

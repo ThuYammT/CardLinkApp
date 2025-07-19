@@ -6,15 +6,19 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
-import { useLayoutEffect, useState } from "react";
-import { useNavigation, useRouter } from "expo-router";
+import { useLayoutEffect, useState, useEffect } from "react";
+import { useNavigation, useRouter, useLocalSearchParams } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
+import * as ImageManipulator from "expo-image-manipulator";
+import * as FileSystem from "expo-file-system";
 
 export default function AddContactScreen() {
   const navigation = useNavigation();
   const router = useRouter();
+  const { imageUri } = useLocalSearchParams(); // 📸 OCR input
+
   const [contact, setContact] = useState({
     firstName: "",
     lastName: "",
@@ -25,19 +29,127 @@ export default function AddContactScreen() {
     company: "",
     website: "",
     notes: "",
-    additionalPhones: [] as string[], // ✅ new
+    additionalPhones: [] as string[],
   });
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, []);
 
+  useEffect(() => {
+    if (imageUri) {
+      handleOCR(imageUri as string, setContact);
+    }
+  }, [imageUri]);
+  
+ const handleOCR = async (uri: string, setContact: (data: any) => void) => {
+  try {
+    const token = await SecureStore.getItemAsync("userToken");
+
+    const manipulated = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1000 } }],
+      {
+        compress: 0.8,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: true,
+      }
+    );
+
+    const response = await fetch("https://cardlink.onrender.com/api/ocr", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ imageBase64: manipulated.base64 }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.log("❌ OCR failed:", data);
+      throw new Error(data.message || "OCR processing failed");
+    }
+
+    console.log("✅ Tesseract OCR result:", data);
+
+    setContact((prev: any) => ({
+      ...prev,
+      firstName: data.firstName || "",
+      lastName: data.lastName || "",
+      nickname: data.nickname || "",
+      position: data.position || "",
+      phone: data.phone || "",
+      email: data.email || "",
+      company: data.company || "",
+      website: data.website || "",
+      notes: data.notes || "",
+      additionalPhones: data.additionalPhones || [],
+    }));
+
+    return data;
+  } catch (error: any) {
+    console.error("❌ OCR error:", error);
+    Alert.alert("Error", error.message || "OCR processing failed");
+    throw error;
+  }
+};
+
+
+
+
+// Cloudinary upload function with better error handling
+const uploadToCloudinary = async (uri: string): Promise<string> => {
+  try {
+    // ✅ Resize & compress before uploading
+    const manipulated = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1000 } }],
+      {
+        compress: 0.8,
+        format: ImageManipulator.SaveFormat.JPEG,
+      }
+    );
+
+    const formData = new FormData();
+    formData.append("file", {
+      uri: manipulated.uri,
+      type: "image/jpeg",
+      name: "ocr-photo.jpg",
+    } as any);
+    formData.append("upload_preset", "ml_default");
+
+    const res = await fetch("https://api.cloudinary.com/v1_1/dwmav1imw/image/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      throw new Error(`Cloudinary upload failed with status ${res.status}`);
+    }
+
+    const data = await res.json();
+    console.log("☁️ Cloudinary response:", data);
+    return data.secure_url.replace("/upload/", "/upload/fl_lossy,f_auto,q_auto:good/");
+  } catch (error) {
+    console.error("❌ Cloudinary upload error:", error);
+    let errorMessage = "Image upload failed";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    throw new Error(errorMessage);
+  }
+};
+
+
+
   const handleSave = async () => {
     const token = await SecureStore.getItemAsync("userToken");
 
     const contactToSave = {
       ...contact,
-      additionalPhones: contact.additionalPhones.join(","), // ✅ stringify
+      additionalPhones: contact.additionalPhones.join(","),
     };
 
     try {
@@ -151,7 +263,9 @@ export default function AddContactScreen() {
               })
             }
           >
-            <Text className="text-blue-700 font-nunito">+ Add another phone</Text>
+            <Text className="text-blue-700 font-nunito">
+              + Add another phone
+            </Text>
           </TouchableOpacity>
 
           {/* Other Fields */}
