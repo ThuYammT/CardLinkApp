@@ -46,8 +46,11 @@ export default function AddContactScreen() {
   try {
     const token = await SecureStore.getItemAsync("userToken");
 
+    const tempPath = FileSystem.cacheDirectory + "ocr-temp.jpg";
+    await FileSystem.copyAsync({ from: uri, to: tempPath });
+
     const manipulated = await ImageManipulator.manipulateAsync(
-      uri,
+      tempPath,
       [{ resize: { width: 1000 } }],
       {
         compress: 0.8,
@@ -88,57 +91,14 @@ export default function AddContactScreen() {
       additionalPhones: data.additionalPhones || [],
     }));
 
+    // 🧹 Clean up temp image
+    await FileSystem.deleteAsync(tempPath, { idempotent: true });
+
     return data;
   } catch (error: any) {
     console.error("❌ OCR error:", error);
     Alert.alert("Error", error.message || "OCR processing failed");
     throw error;
-  }
-};
-
-
-
-
-// Cloudinary upload function with better error handling
-const uploadToCloudinary = async (uri: string): Promise<string> => {
-  try {
-    // ✅ Resize & compress before uploading
-    const manipulated = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: 1000 } }],
-      {
-        compress: 0.8,
-        format: ImageManipulator.SaveFormat.JPEG,
-      }
-    );
-
-    const formData = new FormData();
-    formData.append("file", {
-      uri: manipulated.uri,
-      type: "image/jpeg",
-      name: "ocr-photo.jpg",
-    } as any);
-    formData.append("upload_preset", "ml_default");
-
-    const res = await fetch("https://api.cloudinary.com/v1_1/dwmav1imw/image/upload", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!res.ok) {
-      throw new Error(`Cloudinary upload failed with status ${res.status}`);
-    }
-
-    const data = await res.json();
-    console.log("☁️ Cloudinary response:", data);
-    return data.secure_url.replace("/upload/", "/upload/fl_lossy,f_auto,q_auto:good/");
-  } catch (error) {
-    console.error("❌ Cloudinary upload error:", error);
-    let errorMessage = "Image upload failed";
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
-    throw new Error(errorMessage);
   }
 };
 
