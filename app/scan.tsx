@@ -10,11 +10,18 @@ import {
   StyleSheet,
   Alert,
   Dimensions,
+  ActivityIndicator,
 } from "react-native";
 import { useState, useRef, useLayoutEffect } from "react";
 import { useRouter, useNavigation } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as FileSystem from "expo-file-system";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator"; // ✅ FIXED import
+
+// 🔑 Cloudinary config
+const CLOUD_NAME = "dwmav1imw"; // your Cloudinary cloud name
+const UPLOAD_PRESET = "ml_default"; // your unsigned preset
 
 export default function ScanScreen() {
   const [facing, setFacing] = useState<CameraType>("back");
@@ -22,8 +29,9 @@ export default function ScanScreen() {
   const cameraRef = useRef<any>(null);
   const router = useRouter();
   const navigation = useNavigation();
+  const [capturing, setCapturing] = useState(false); // ✅ add state
 
-  // 🧼 Remove the default top bar
+  // 🧼 Hide top bar
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, []);
@@ -32,39 +40,86 @@ export default function ScanScreen() {
   if (!permission.granted) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={styles.message}>
-          We need your permission to show the camera
-        </Text>
-        <TouchableOpacity
-          style={styles.grantBtn}
-          onPress={requestPermission}
-        >
+        <Text style={styles.message}>We need your permission to show the camera</Text>
+        <TouchableOpacity style={styles.grantBtn} onPress={requestPermission}>
           <Text style={styles.text}>Grant Permission</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
-  // 📸 Capture image
-  const takePicture = async () => {
-    if (cameraRef.current) {
-      try {
-        const photo = await cameraRef.current.takePictureAsync({ quality: 1 });
-        console.log("Captured URI:", photo.uri);
-        Alert.alert("Captured", "Image taken successfully!");
+  // 📤 Upload helper
+  const uploadToCloudinary = async (uri: string) => {
+    const base64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
 
-        // TODO: Send `photo.uri` to OCR pipeline or next screen
-        router.push({
-        pathname: "/add-contact",
-        params: { imageUri: photo.uri },
-      });
+    const data = new FormData();
+    data.append("file", `data:image/jpeg;base64,${base64}`);
+    data.append("upload_preset", UPLOAD_PRESET);
 
-      } catch (err) {
-        Alert.alert("Error", "Failed to capture image.");
-        console.error(err);
-      }
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+      method: "POST",
+      body: data,
+    });
+
+    const json = await res.json();
+    if (json.secure_url) {
+      return json.secure_url;
+    } else {
+      throw new Error("Cloudinary upload failed: " + JSON.stringify(json));
     }
   };
+
+  // 📸 Capture image → crop → upload → go to add-contact
+  const takePicture = async () => {
+  if (cameraRef.current && !capturing) {  // ✅ prevent spamming
+    try {
+      setCapturing(true); // lock capture
+
+      const photo = await cameraRef.current.takePictureAsync({ quality: 1 });
+      console.log("Captured URI:", photo.uri);
+
+      const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+      const frameWidth = screenWidth * 0.9;
+      const frameHeight = frameWidth * 0.6;
+
+      const scaleX = photo.width / screenWidth;
+      const scaleY = photo.height / screenHeight;
+
+      const cropRegion = {
+        originX: (screenWidth * 0.05) * scaleX,
+        originY: (screenHeight / 2 - frameHeight / 2) * scaleY,
+        width: frameWidth * scaleX,
+        height: frameHeight * scaleY,
+      };
+
+      console.log("Crop region:", cropRegion);
+
+      const cropped = await manipulateAsync(
+        photo.uri,
+        [{ crop: cropRegion }],
+        { compress: 1, format: SaveFormat.JPEG }
+      );
+
+      console.log("✅ Cropped URI:", cropped.uri);
+
+      const cloudinaryUrl = await uploadToCloudinary(cropped.uri);
+      console.log("✅ Cloudinary URL:", cloudinaryUrl);
+
+      // 👉 navigate to add-contact
+      router.push({
+        pathname: "/add-contact",
+        params: { imageUri: cloudinaryUrl },
+      });
+    } catch (err) {
+      Alert.alert("Error", "Failed to capture or crop image.");
+      console.error(err);
+      setCapturing(false); // unlock if failed
+    }
+  }
+};
+
 
   const toggleCameraFacing = () => {
     setFacing((cur) => (cur === "back" ? "front" : "back"));
@@ -72,23 +127,31 @@ export default function ScanScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <CameraView
-        style={styles.camera}
-        facing={facing}
-        ref={cameraRef}
-        ratio="16:9"
-      >
+      <CameraView style={styles.camera} facing={facing} ref={cameraRef} ratio="16:9">
         <View style={styles.overlayContainer}>
-          {/* Card-style Frame */}
+          {/* Frame */}
           <View style={styles.cardFrame} />
 
           {/* Buttons */}
           <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.circleBtn} onPress={toggleCameraFacing}>
+            <TouchableOpacity
+              style={[styles.circleBtn, capturing && { opacity: 0.5 }]}
+              onPress={toggleCameraFacing}
+              disabled={capturing}
+            >
               <FontAwesome name="refresh" size={22} color="white" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.captureBtn} onPress={takePicture}>
-              <FontAwesome name="camera" size={28} color="white" />
+
+            <TouchableOpacity
+              style={[styles.captureBtn, capturing && { opacity: 0.5 }]}
+              onPress={takePicture}
+              disabled={capturing} // ✅ disable while busy
+            >
+              {capturing ? (
+                <ActivityIndicator size="small" color="white" /> // ✅ show loader
+              ) : (
+                <FontAwesome name="camera" size={28} color="white" />
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -96,24 +159,14 @@ export default function ScanScreen() {
     </SafeAreaView>
   );
 }
-
 const { width } = Dimensions.get("window");
 const frameWidth = width * 0.9;
 const frameHeight = frameWidth * 0.6;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "black",
-  },
-  camera: {
-    flex: 1,
-  },
-  overlayContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  container: { flex: 1, backgroundColor: "black" },
+  camera: { flex: 1 },
+  overlayContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   cardFrame: {
     width: frameWidth,
     height: frameHeight,
@@ -129,16 +182,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     width: "60%",
   },
-  circleBtn: {
-    backgroundColor: "#182C6B",
-    padding: 14,
-    borderRadius: 40,
-  },
-  captureBtn: {
-    backgroundColor: "#182C6B",
-    padding: 20,
-    borderRadius: 50,
-  },
+  circleBtn: { backgroundColor: "#182C6B", padding: 14, borderRadius: 40 },
+  captureBtn: { backgroundColor: "#182C6B", padding: 20, borderRadius: 50 },
   grantBtn: {
     backgroundColor: "#182C6B",
     paddingVertical: 12,
@@ -146,14 +191,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignSelf: "center",
   },
-  message: {
-    color: "#333",
-    fontSize: 16,
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  text: {
-    color: "white",
-    fontSize: 16,
-  },
+  message: { color: "#333", fontSize: 16, textAlign: "center", marginBottom: 20 },
+  text: { color: "white", fontSize: 16 },
 });

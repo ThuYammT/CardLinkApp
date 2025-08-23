@@ -11,13 +11,12 @@ import { useNavigation, useRouter, useLocalSearchParams } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
-import * as ImageManipulator from "expo-image-manipulator";
-import * as FileSystem from "expo-file-system";
+
 
 export default function AddContactScreen() {
   const navigation = useNavigation();
   const router = useRouter();
-  const { imageUri } = useLocalSearchParams(); // 📸 OCR input
+  const { imageUri } = useLocalSearchParams(); // 📸 Cloudinary URL
 
   const [contact, setContact] = useState({
     firstName: "",
@@ -30,42 +29,32 @@ export default function AddContactScreen() {
     website: "",
     notes: "",
     additionalPhones: [] as string[],
+    cardImage: imageUri as string, // 🔑 store the scanned card image
   });
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, []);
 
+  // 🔍 Run OCR on Cloudinary image
   useEffect(() => {
     if (imageUri) {
-      handleOCR(imageUri as string, setContact);
+      handleOCR(imageUri as string);
     }
   }, [imageUri]);
   
- const handleOCR = async (uri: string, setContact: (data: any) => void) => {
+  const handleOCR = async (cloudinaryUrl: string) => {
   try {
     const token = await SecureStore.getItemAsync("userToken");
 
-    const tempPath = FileSystem.cacheDirectory + "ocr-temp.jpg";
-    await FileSystem.copyAsync({ from: uri, to: tempPath });
-
-    const manipulated = await ImageManipulator.manipulateAsync(
-      tempPath,
-      [{ resize: { width: 1000 } }],
-      {
-        compress: 0.8,
-        format: ImageManipulator.SaveFormat.JPEG,
-        base64: true,
-      }
-    );
-
+    // 1️⃣ Skip re-upload — just send Cloudinary URL to backend
     const response = await fetch("https://cardlink.onrender.com/api/ocr", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ imageBase64: manipulated.base64 }),
+      body: JSON.stringify({ imageUrl: cloudinaryUrl }),
     });
 
     const data = await response.json();
@@ -75,9 +64,10 @@ export default function AddContactScreen() {
       throw new Error(data.message || "OCR processing failed");
     }
 
-    console.log("✅ Tesseract OCR result:", data);
+    console.log("✅ OCR result:", data);
 
-    setContact((prev: any) => ({
+    // 2️⃣ Save parsed OCR data + card image
+    setContact((prev) => ({
       ...prev,
       firstName: data.firstName || "",
       lastName: data.lastName || "",
@@ -89,27 +79,23 @@ export default function AddContactScreen() {
       website: data.website || "",
       notes: data.notes || "",
       additionalPhones: data.additionalPhones || [],
+      cardImage: cloudinaryUrl, // ✅ store scanned card image
     }));
-
-    // 🧹 Clean up temp image
-    await FileSystem.deleteAsync(tempPath, { idempotent: true });
-
-    return data;
   } catch (error: any) {
     console.error("❌ OCR error:", error);
     Alert.alert("Error", error.message || "OCR processing failed");
-    throw error;
   }
 };
 
 
 
+  // 💾 Save contact with cardImage
   const handleSave = async () => {
     const token = await SecureStore.getItemAsync("userToken");
 
     const contactToSave = {
       ...contact,
-      additionalPhones: contact.additionalPhones.join(","),
+      additionalPhones: contact.additionalPhones, // keep array, not joined
     };
 
     try {

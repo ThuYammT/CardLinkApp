@@ -16,6 +16,7 @@ import * as SecureStore from "expo-secure-store";
 
 // ✅ Updated Contact type
 type Contact = {
+  cardImage: string;
   _id: string;
   firstName: string;
   lastName: string;
@@ -131,6 +132,7 @@ export default function Contacts() {
                     position: c.position || "",
                     additionalPhones: JSON.stringify(c.additionalPhones || []),
                     createdAt: c.createdAt || "",
+                    cardImage: c.cardImage || "", 
                     isFavorite: String(c.isFavorite),
                   },
                 })
