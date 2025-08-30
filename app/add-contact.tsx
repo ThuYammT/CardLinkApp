@@ -12,7 +12,6 @@ import { FontAwesome } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
 
-
 export default function AddContactScreen() {
   const navigation = useNavigation();
   const router = useRouter();
@@ -42,62 +41,113 @@ export default function AddContactScreen() {
       handleOCR(imageUri as string);
     }
   }, [imageUri]);
-  
+
   const handleOCR = async (cloudinaryUrl: string) => {
+    try {
+      const token = await SecureStore.getItemAsync("userToken");
+
+      // send Cloudinary URL to backend for OCR
+      const response = await fetch("https://cardlink.onrender.com/api/ocr", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ imageUrl: cloudinaryUrl }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.log("❌ OCR failed:", data);
+        throw new Error(data.message || "OCR processing failed");
+      }
+
+      console.log("✅ OCR result:", data);
+
+      // update contact with OCR data
+      setContact((prev) => ({
+        ...prev,
+        firstName: data.firstName || "",
+        lastName: data.lastName || "",
+        nickname: data.nickname || "",
+        position: data.position || "",
+        phone: data.phone || "",
+        email: data.email || "",
+        company: data.company || "",
+        website: data.website || "",
+        notes: data.notes || "",
+        additionalPhones: data.additionalPhones || [],
+        cardImage: cloudinaryUrl,
+      }));
+    } catch (error: any) {
+      console.error("❌ OCR error:", error);
+      Alert.alert("Error", error.message || "OCR processing failed");
+    }
+  };
+
+  // 💾 Save contact with duplicate check
+  const handleSave = async () => {
+  const token = await SecureStore.getItemAsync("userToken");
+  if (!token) {
+    Alert.alert("Error", "No token found. Please log in again.");
+    return;
+  }
+
+  const contactToSave = {
+    ...contact,
+    additionalPhones: contact.additionalPhones,
+  };
+
   try {
-    const token = await SecureStore.getItemAsync("userToken");
-
-    // 1️⃣ Skip re-upload — just send Cloudinary URL to backend
-    const response = await fetch("https://cardlink.onrender.com/api/ocr", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ imageUrl: cloudinaryUrl }),
+    // 1️⃣ fetch existing contacts
+    const resAll = await fetch("https://cardlink.onrender.com/api/contacts", {
+      headers: { Authorization: `Bearer ${token}` },
     });
+    const existing = await resAll.json();
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.log("❌ OCR failed:", data);
-      throw new Error(data.message || "OCR processing failed");
+    if (!resAll.ok || !Array.isArray(existing)) {
+      throw new Error("Could not load contacts for duplicate check");
     }
 
-    console.log("✅ OCR result:", data);
+    // 2️⃣ check for duplicate
+    const duplicate = existing.find(
+      (c: any) =>
+        (c.email && contactToSave.email && c.email === contactToSave.email) ||
+        (c.phone && contactToSave.phone && c.phone === contactToSave.phone)
+    );
 
-    // 2️⃣ Save parsed OCR data + card image
-    setContact((prev) => ({
-      ...prev,
-      firstName: data.firstName || "",
-      lastName: data.lastName || "",
-      nickname: data.nickname || "",
-      position: data.position || "",
-      phone: data.phone || "",
-      email: data.email || "",
-      company: data.company || "",
-      website: data.website || "",
-      notes: data.notes || "",
-      additionalPhones: data.additionalPhones || [],
-      cardImage: cloudinaryUrl, // ✅ store scanned card image
-    }));
-  } catch (error: any) {
-    console.error("❌ OCR error:", error);
-    Alert.alert("Error", error.message || "OCR processing failed");
+    if (duplicate) {
+      Alert.alert(
+        "Duplicate Contact Found",
+        `${contactToSave.firstName} ${contactToSave.lastName} already exists. Do you want to replace it with the latest info?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Keep Both",
+            onPress: async () => {
+              await actuallySave(token, contactToSave);
+            },
+          },
+          {
+            text: "Replace",
+            onPress: async () => {
+              await replaceContact(token, duplicate._id, contactToSave);
+            },
+          },
+        ]
+      );
+    } else {
+      await actuallySave(token, contactToSave);
+    }
+  } catch (err: any) {
+    Alert.alert("Error", err.message || "Could not save contact");
   }
 };
 
 
-
-  // 💾 Save contact with cardImage
-  const handleSave = async () => {
-    const token = await SecureStore.getItemAsync("userToken");
-
-    const contactToSave = {
-      ...contact,
-      additionalPhones: contact.additionalPhones, // keep array, not joined
-    };
-
+  // helper: save normally
+  const actuallySave = async (token: string, contactToSave: any) => {
     try {
       const res = await fetch("https://cardlink.onrender.com/api/contacts", {
         method: "POST",
@@ -107,7 +157,6 @@ export default function AddContactScreen() {
         },
         body: JSON.stringify(contactToSave),
       });
-
       const data = await res.json();
       if (res.ok) {
         Alert.alert("Saved", "Contact added successfully!");
@@ -115,7 +164,30 @@ export default function AddContactScreen() {
       } else {
         Alert.alert("Error", data.message || "Failed to save");
       }
-    } catch (err) {
+    } catch {
+      Alert.alert("Network Error", "Could not connect to server");
+    }
+  };
+
+  // helper: replace existing
+  const replaceContact = async (token: string, id: string, newData: any) => {
+    try {
+      const res = await fetch(`https://cardlink.onrender.com/api/contacts/${id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newData),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        Alert.alert("Updated", "Contact replaced with latest info!");
+        router.replace("/contact");
+      } else {
+        Alert.alert("Error", data.message || "Failed to replace contact");
+      }
+    } catch {
       Alert.alert("Network Error", "Could not connect to server");
     }
   };

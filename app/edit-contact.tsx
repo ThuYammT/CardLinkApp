@@ -21,21 +21,33 @@ export default function EditContactScreen() {
     navigation.setOptions({ headerShown: false });
   }, []);
 
-  const [contact, setContact] = useState({
-    firstName: String(params.firstName || ""),
-    lastName: String(params.lastName || ""),
-    phone: String(params.phone || ""),
-    email: String(params.email || ""),
-    company: String(params.company || ""),
-    website: String(params.website || ""),
-    notes: String(params.notes || ""),
-    nickname: String(params.nickname || ""),
-    position: String(params.position || ""),
-    additionalPhones:
-      typeof params.additionalPhones === "string"
-        ? params.additionalPhones.split(",").map((s) => s.trim())
-        : [],
-  });
+  const parseAdditionalPhones = (input: any) => {
+  if (!input) return [];
+  if (Array.isArray(input)) return input;
+  try {
+    const parsed = JSON.parse(input);
+    return Array.isArray(parsed) ? parsed : [String(parsed)];
+  } catch {
+    return String(input)
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+};
+
+const [contact, setContact] = useState({
+  firstName: String(params.firstName || ""),
+  lastName: String(params.lastName || ""),
+  phone: String(params.phone || ""),
+  email: String(params.email || ""),
+  company: String(params.company || ""),
+  website: String(params.website || ""),
+  notes: String(params.notes || ""),
+  nickname: String(params.nickname || ""),
+  position: String(params.position || ""),
+  additionalPhones: parseAdditionalPhones(params.additionalPhones),
+});
+
 
   const contactId = String(params._id || "");
 
@@ -52,9 +64,10 @@ export default function EditContactScreen() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            ...contact,
-            additionalPhones: contact.additionalPhones.join(","),
-          }),
+          ...contact,
+          additionalPhones: contact.additionalPhones.filter(Boolean), // clean array
+        }),
+
         }
       );
 

@@ -45,7 +45,7 @@ export default function Profile() {
     fetchUser();
   }, []);
 
-  return (
+  return (                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
     <SafeAreaView className="flex-1 bg-white">
       {/* Top Bar */}
       <View className="bg-blue-900 px-4 py-8 flex-row items-center">

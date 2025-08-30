@@ -74,23 +74,32 @@ export default function Contacts() {
   }, []);
 
   useEffect(() => {
-    const fetchContacts = async () => {
-      const token = await SecureStore.getItemAsync("userToken");
-      try {
-        const res = await fetch("https://cardlink.onrender.com/api/contacts", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (res.ok && Array.isArray(data)) setContacts(data);
-        else console.error("Fetch error:", data?.message);
-      } catch (err) {
-        console.error("Error loading contacts:", err);
-      } finally {
-        setLoading(false);
+  const fetchContacts = async () => {
+    const token = await SecureStore.getItemAsync("userToken");
+    if (!token) return; // ✅ safety check
+
+    try {
+      const res = await fetch("https://cardlink.onrender.com/api/contacts", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+
+      if (res.ok && Array.isArray(data)) {
+        setContacts(data); // ✅ 
+      } else {
+        console.error("Fetch error:", data?.message);
       }
-    };
-    fetchContacts();
-  }, []);
+    } catch (err) {
+      console.error("Error loading contacts:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchContacts();
+}, []);
+
+
 
   // unique companies for filter
   const companies = useMemo(() => {

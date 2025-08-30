@@ -17,7 +17,7 @@ import { useRouter, useNavigation } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as FileSystem from "expo-file-system";
-import { manipulateAsync, SaveFormat } from "expo-image-manipulator"; // ✅ FIXED import
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 
 // 🔑 Cloudinary config
 const CLOUD_NAME = "dwmav1imw"; // your Cloudinary cloud name
@@ -29,7 +29,7 @@ export default function ScanScreen() {
   const cameraRef = useRef<any>(null);
   const router = useRouter();
   const navigation = useNavigation();
-  const [capturing, setCapturing] = useState(false); // ✅ add state
+  const [capturing, setCapturing] = useState(false); // ✅ state for popup loading
 
   // 🧼 Hide top bar
   useLayoutEffect(() => {
@@ -73,53 +73,52 @@ export default function ScanScreen() {
 
   // 📸 Capture image → crop → upload → go to add-contact
   const takePicture = async () => {
-  if (cameraRef.current && !capturing) {  // ✅ prevent spamming
-    try {
-      setCapturing(true); // lock capture
+    if (cameraRef.current && !capturing) {
+      try {
+        setCapturing(true); // lock capture
 
-      const photo = await cameraRef.current.takePictureAsync({ quality: 1 });
-      console.log("Captured URI:", photo.uri);
+        const photo = await cameraRef.current.takePictureAsync({ quality: 1 });
+        console.log("Captured URI:", photo.uri);
 
-      const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
-      const frameWidth = screenWidth * 0.9;
-      const frameHeight = frameWidth * 0.6;
+        const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+        const frameWidth = screenWidth * 0.9;
+        const frameHeight = frameWidth * 0.6;
 
-      const scaleX = photo.width / screenWidth;
-      const scaleY = photo.height / screenHeight;
+        const scaleX = photo.width / screenWidth;
+        const scaleY = photo.height / screenHeight;
 
-      const cropRegion = {
-        originX: (screenWidth * 0.05) * scaleX,
-        originY: (screenHeight / 2 - frameHeight / 2) * scaleY,
-        width: frameWidth * scaleX,
-        height: frameHeight * scaleY,
-      };
+        const cropRegion = {
+          originX: (screenWidth * 0.05) * scaleX,
+          originY: (screenHeight / 2 - frameHeight / 2) * scaleY,
+          width: frameWidth * scaleX,
+          height: frameHeight * scaleY,
+        };
 
-      console.log("Crop region:", cropRegion);
+        console.log("Crop region:", cropRegion);
 
-      const cropped = await manipulateAsync(
-        photo.uri,
-        [{ crop: cropRegion }],
-        { compress: 1, format: SaveFormat.JPEG }
-      );
+        const cropped = await manipulateAsync(
+          photo.uri,
+          [{ crop: cropRegion }],
+          { compress: 1, format: SaveFormat.JPEG }
+        );
 
-      console.log("✅ Cropped URI:", cropped.uri);
+        console.log("✅ Cropped URI:", cropped.uri);
 
-      const cloudinaryUrl = await uploadToCloudinary(cropped.uri);
-      console.log("✅ Cloudinary URL:", cloudinaryUrl);
+        const cloudinaryUrl = await uploadToCloudinary(cropped.uri);
+        console.log("✅ Cloudinary URL:", cloudinaryUrl);
 
-      // 👉 navigate to add-contact
-      router.push({
-        pathname: "/add-contact",
-        params: { imageUri: cloudinaryUrl },
-      });
-    } catch (err) {
-      Alert.alert("Error", "Failed to capture or crop image.");
-      console.error(err);
-      setCapturing(false); // unlock if failed
+        // 👉 navigate to add-contact
+        router.push({
+          pathname: "/add-contact",
+          params: { imageUri: cloudinaryUrl },
+        });
+      } catch (err) {
+        Alert.alert("Error", "Failed to capture or crop image.");
+        console.error(err);
+        setCapturing(false); // unlock if failed
+      }
     }
-  }
-};
-
+  };
 
   const toggleCameraFacing = () => {
     setFacing((cur) => (cur === "back" ? "front" : "back"));
@@ -147,18 +146,23 @@ export default function ScanScreen() {
               onPress={takePicture}
               disabled={capturing} // ✅ disable while busy
             >
-              {capturing ? (
-                <ActivityIndicator size="small" color="white" /> // ✅ show loader
-              ) : (
-                <FontAwesome name="camera" size={28} color="white" />
-              )}
+              <FontAwesome name="camera" size={28} color="white" />
             </TouchableOpacity>
           </View>
         </View>
       </CameraView>
+
+      {/* 🔥 Popup Loader Overlay */}
+      {capturing && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="white" />
+          <Text style={styles.loadingText}>Image captured… Loading</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
+
 const { width } = Dimensions.get("window");
 const frameWidth = width * 0.9;
 const frameHeight = frameWidth * 0.6;
@@ -193,4 +197,23 @@ const styles = StyleSheet.create({
   },
   message: { color: "#333", fontSize: 16, textAlign: "center", marginBottom: 20 },
   text: { color: "white", fontSize: 16 },
+
+  // 🔥 Popup loader styles
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 999,
+  },
+  loadingText: {
+    color: "white",
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: "500",
+  },
 });
