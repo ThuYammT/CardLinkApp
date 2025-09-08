@@ -66,20 +66,23 @@ export default function AddContactScreen() {
       console.log("✅ OCR result:", data);
 
       // update contact with OCR data
-      setContact((prev) => ({
-        ...prev,
-        firstName: data.firstName || "",
-        lastName: data.lastName || "",
-        nickname: data.nickname || "",
-        position: data.position || "",
-        phone: data.phone || "",
-        email: data.email || "",
-        company: data.company || "",
-        website: data.website || "",
-        notes: data.notes || "",
-        additionalPhones: data.additionalPhones || [],
-        cardImage: cloudinaryUrl,
-      }));
+        setContact((prev) => ({
+          ...prev,
+          firstName: data.firstName?.value || "",
+          lastName: data.lastName?.value || "",
+          nickname: data.nickname?.value || "",
+          position: data.position?.value || "",
+          phone: data.phone?.value || "",
+          email: data.email?.value || "",
+          company: data.company?.value || "",
+          website: data.website?.value || "",
+          notes: data.notes?.value || "",
+          additionalPhones: Array.isArray(data.additionalPhones)
+            ? data.additionalPhones.map((p: any) => p.value || "")
+            : [],
+          cardImage: cloudinaryUrl,
+        }));
+
     } catch (error: any) {
       console.error("❌ OCR error:", error);
       Alert.alert("Error", error.message || "OCR processing failed");
