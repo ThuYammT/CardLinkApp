@@ -102,21 +102,23 @@ export default function HomeScreen() {
   });
  
   if (!result.canceled) {
-    const uri = result.assets[0].uri;
-    const dest = FileSystem.documentDirectory + "selected.jpg";
- 
-    try {
-      await FileSystem.copyAsync({ from: uri, to: dest });
-      console.log("✅ Saved gallery image to:", dest);
- 
-      setSheetOpen(false);
-      router.push({ pathname: "/crop", params: { imageUri: dest } });
-    } catch (err) {
-      console.error("❌ Failed to copy image:", err);
-      // fallback: send original URI
-      router.push({ pathname: "/crop", params: { imageUri: uri } });
-    }
+  const uri = result.assets[0].uri;
+  // @ts-ignore
+  const dest = `${FileSystem.documentDirectory}selected.jpg`; // ✅ safer string
+
+  try {
+    await FileSystem.copyAsync({ from: uri, to: dest });
+    console.log("✅ Saved gallery image to:", dest);
+
+    setSheetOpen(false);
+    router.push({ pathname: "/crop", params: { imageUri: dest } });
+  } catch (err) {
+    console.error("❌ Failed to copy image:", err);
+    // fallback: send original URI
+    router.push({ pathname: "/crop", params: { imageUri: uri } });
   }
+}
+
 };
 
   return (

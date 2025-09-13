@@ -51,8 +51,9 @@ export default function ScanScreen() {
   // 📤 Upload helper
   const uploadToCloudinary = async (uri: string) => {
     const base64 = await FileSystem.readAsStringAsync(uri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+  encoding: "base64",
+});
+
  
     const data = new FormData();
     data.append("file", `data:image/jpeg;base64,${base64}`);

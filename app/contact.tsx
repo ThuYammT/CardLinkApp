@@ -2,6 +2,7 @@
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { router, usePathname, useRouter } from "expo-router";
+import { runOnJS } from "react-native-reanimated";
 import * as SecureStore from "expo-secure-store";
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
@@ -13,8 +14,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Swipeable from "react-native-gesture-handler/Swipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from "react-native-reanimated";
 
 /* ---------- Theme ---------- */
 const BRAND_BLUE = "#213BBB";
@@ -68,6 +74,40 @@ export default function Contacts() {
   elevation: 3,
 };
 
+function SwipeableRow({
+  children,
+  onDelete,
+  onFav,
+}: {
+  children: React.ReactNode;
+  onDelete: () => void;
+  onFav: () => void;
+}) {
+  const translateX = useSharedValue(0);
+
+  const pan = Gesture.Pan()
+    .onUpdate((e) => {
+      translateX.value = e.translationX;
+    })
+    .onEnd(() => {
+      if (translateX.value < -80) {
+        runOnJS(onDelete)(); // ✅ safely call JS
+      } else if (translateX.value > 80) {
+        runOnJS(onFav)(); // ✅ safely call JS
+      }
+      translateX.value = withSpring(0);
+    });
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  return (
+    <GestureDetector gesture={pan}>
+      <Animated.View style={style}>{children}</Animated.View>
+    </GestureDetector>
+  );
+}
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
@@ -188,43 +228,6 @@ export default function Contacts() {
     }
   };
 
-  /* ---------- Swipe buttons ---------- */
-  const renderRightActions = (_progress: any, _dragX: any, onDelete: () => void) => (
-    <TouchableOpacity
-      onPress={onDelete}
-      style={{
-        backgroundColor: "#ff5047",
-        justifyContent: "center",
-        alignItems: "center",
-        width: 88,
-        marginVertical: 14,
-        borderRadius: 12,
-        transform: [{ translateY: -8 }],
-      }}
-    >
-      <FontAwesome name="trash" size={20} color="white" />
-      <Text style={{ color: "white", marginTop: 4 }}>Delete</Text>
-    </TouchableOpacity>
-  );
-
-  const renderLeftActions = (_progress: any, _dragX: any, onFav: () => void, fav: boolean) => (
-    <TouchableOpacity
-      onPress={onFav}
-      style={{
-        backgroundColor: fav ? "#e9d68a" : "#ffeaa3",
-        justifyContent: "center",
-        alignItems: "center",
-        width: 88,
-        marginVertical: 14,
-        borderRadius: 12,
-        transform: [{ translateY: -8 }],
-      }}
-    >
-      <FontAwesome name={fav ? "star" : "star-o"} size={20} color={STAR_YELLOW} />
-      <Text style={{ color: "#5b4a00", marginTop: 4 }}>{fav ? "Unfave" : "Favorite"}</Text>
-    </TouchableOpacity>
-  );
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: LIGHT_BG }}>
       {/* Header: title + actions (Add pill, Filter icon) */}
@@ -275,14 +278,10 @@ export default function Contacts() {
           <Text className="text-center text-gray-600 font-nunito">No contacts found.</Text>
         ) : (
           displayed.map((c) => (
-            <Swipeable
+              <SwipeableRow
               key={c._id}
-              renderLeftActions={(progress, dragX) =>
-                renderLeftActions(progress, dragX, () => toggleFavorite(c), c.isFavorite)
-              }
-              renderRightActions={(progress, dragX) =>
-                renderRightActions(progress, dragX, () => confirmDelete(c._id))
-              }
+              onDelete={() => confirmDelete(c._id)}
+              onFav={() => toggleFavorite(c)}
             >
               <TouchableOpacity
                 onPress={() =>
@@ -347,7 +346,7 @@ export default function Contacts() {
               </View>
 
               </TouchableOpacity>
-            </Swipeable>
+          </SwipeableRow>
           ))
         )}
       </ScrollView>

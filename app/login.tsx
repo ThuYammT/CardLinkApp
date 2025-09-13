@@ -1,4 +1,4 @@
-import { Link, router } from 'expo-router';
+import { Link, router, useNavigation } from "expo-router";
 import {
   Image,
   Text,
@@ -8,94 +8,191 @@ import {
   Alert,
   Animated,
   Easing,
-} from 'react-native';
-import { useState, useEffect, useRef } from 'react';
-import * as SecureStore from 'expo-secure-store';
+  StyleSheet,
+} from "react-native";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import * as SecureStore from "expo-secure-store";
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const navigation = useNavigation();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  // ✅ Hide default header
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: false });
+  }, []);
 
   // Animations
-  const logoScale = useRef(new Animated.Value(0)).current;
-  const formScale = useRef(new Animated.Value(0)).current;
+  // Animations
+const logoScale = useRef(new Animated.Value(0.8)).current;
+const formScale = useRef(new Animated.Value(0.8)).current;
 
-  useEffect(() => {
-    Animated.sequence([
-      Animated.timing(logoScale, {
-        toValue: 1,
-        duration: 600,
-        easing: Easing.out(Easing.elastic(1.2)),
-        useNativeDriver: true,
-      }),
-      Animated.timing(formScale, {
-        toValue: 1,
-        duration: 600,
-        easing: Easing.out(Easing.elastic(1.2)),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
+useEffect(() => {
+  Animated.sequence([
+    Animated.timing(logoScale, {
+      toValue: 1,
+      duration: 600,
+      easing: Easing.out(Easing.elastic(1.2)),
+      useNativeDriver: true,
+    }),
+    Animated.timing(formScale, {
+      toValue: 1,
+      duration: 600,
+      easing: Easing.out(Easing.elastic(1.2)),
+      useNativeDriver: true,
+    }),
+  ]).start();
+}, []);
+
 
   const handleLogin = async () => {
     try {
-      const res = await fetch('https://cardlink.onrender.com/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("https://cardlink.onrender.com/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
       if (res.ok) {
-        console.log('Token:', data.token);
+        console.log("Token:", data.token);
 
         // ✅ Save token securely
-        await SecureStore.setItemAsync('userToken', data.token);
+        await SecureStore.setItemAsync("userToken", data.token);
 
-        Alert.alert('Login Success', "You're now logged in!");
-        router.replace('/home');
+        Alert.alert("Login Success", "You're now logged in!");
+        router.replace("/home");
       } else {
-        Alert.alert('Login Failed', data.message || 'Invalid credentials');
+        Alert.alert("Login Failed", data.message || "Invalid credentials");
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to connect to server');
+      Alert.alert("Error", "Failed to connect to server");
     }
   };
 
   return (
-    <View className="flex-1 items-center justify-center bg-white">
-      <Image source={require('../assets/background.png')} className="absolute w-full h-full" />
+    <View style={styles.container}>
+      {/* Background image */}
+      <Image
+        source={require("../assets/background.png")}
+        style={styles.backgroundImage}
+      />
 
-      <Animated.View style={{ transform: [{ scale: logoScale }] }} className="items-center mb-10">
-        <Image source={require('../assets/logo.png')} className="w-36 h-36 mb-4" />
+      {/* Logo */}
+      <Animated.View
+        style={[
+          { transform: [{ scale: logoScale }] },
+          { alignItems: "center", marginBottom: 40 },
+        ]}
+      >
+        <Image
+          source={require("../assets/logo.png")}
+          style={{ width: 144, height: 144, marginBottom: 16 }}
+        />
       </Animated.View>
 
-      <Animated.View style={{ transform: [{ scale: formScale }] }} className="w-4/5">
+      {/* Form Card */}
+      <Animated.View
+        style={[
+          {
+            transform: [{ scale: formScale }],
+          },
+          styles.formCard,
+        ]}
+      >
         <TextInput
           placeholder="Email"
-          placeholderTextColor="#888"
-          className="bg-white rounded px-4 py-3 mb-4 font-nunito"
+          placeholderTextColor="#666"
+          style={styles.input}
           value={email}
           onChangeText={setEmail}
         />
+
         <TextInput
           placeholder="Password"
-          placeholderTextColor="#888"
+          placeholderTextColor="#666"
           secureTextEntry
-          className="bg-white rounded px-4 py-3 mb-2 font-nunito"
+          style={styles.input}
           value={password}
           onChangeText={setPassword}
         />
-        <TouchableOpacity className="bg-button rounded py-3 mb-2" onPress={handleLogin}>
-          <Text className="text-center text-black font-bold font-nunito">LOGIN</Text>
+
+        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+          <Text style={styles.loginText}>LOGIN</Text>
         </TouchableOpacity>
-        <Text className="text-right text-xs mb-6 text-white">Forgot your Password?</Text>
+
+        <Text style={styles.forgotText}>Forgot your Password?</Text>
       </Animated.View>
 
-      <Text className="text-white mb-2 font-nunito">WELCOME</Text>
-      <Link href="/signup" className="text-white underline text-sm font-nunito">
+      {/* Footer */}
+      <Text style={styles.welcomeText}>WELCOME</Text>
+      <Link href="/signup" style={styles.signupText}>
         Sign up
       </Link>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  backgroundImage: {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+  },
+  formCard: {
+    width: "85%",
+    backgroundColor: "#fff", // ✅ solid white so always visible
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+  },
+  input: {
+    backgroundColor: "#f0f0f0",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    fontFamily: "Nunito",
+    fontSize: 16,
+    color: "#000",
+  },
+  loginButton: {
+    backgroundColor: "#213BBB", // brand blue
+    borderRadius: 8,
+    paddingVertical: 14,
+    marginBottom: 12,
+  },
+  loginText: {
+    textAlign: "center",
+    color: "#fff",
+    fontWeight: "bold",
+    fontFamily: "Nunito",
+    fontSize: 16,
+  },
+  forgotText: {
+    textAlign: "right",
+    fontSize: 12,
+    marginBottom: 8,
+    color: "#374151",
+  },
+  welcomeText: {
+    color: "#213BBB",
+    marginTop: 8,
+    marginBottom: 4,
+    fontFamily: "Nunito",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  signupText: {
+    color: "#213BBB",
+    textDecorationLine: "underline",
+    fontSize: 14,
+    fontFamily: "Nunito",
+  },
+});
