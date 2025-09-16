@@ -5,7 +5,6 @@ import { router, useNavigation, usePathname, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import LottieView from 'lottie-react-native';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import * as FileSystem from "expo-file-system";
 import {
   Alert,
   Modal,
@@ -100,26 +99,21 @@ export default function HomeScreen() {
     quality: 1,
     allowsEditing: false,
   });
- 
+
   if (!result.canceled) {
-  const uri = result.assets[0].uri;
-  // @ts-ignore
-  const dest = `${FileSystem.documentDirectory}selected.jpg`; // ✅ safer string
+    const uri = result.assets[0].uri;
 
-  try {
-    await FileSystem.copyAsync({ from: uri, to: dest });
-    console.log("✅ Saved gallery image to:", dest);
-
-    setSheetOpen(false);
-    router.push({ pathname: "/crop", params: { imageUri: dest } });
-  } catch (err) {
-    console.error("❌ Failed to copy image:", err);
-    // fallback: send original URI
-    router.push({ pathname: "/crop", params: { imageUri: uri } });
+    try {
+      // ✅ no need to copy, just pass original uri
+      console.log("✅ Selected gallery image:", uri);
+      setSheetOpen(false);
+      router.push({ pathname: "/crop", params: { imageUri: uri } });
+    } catch (err) {
+      console.error("❌ Failed to handle image:", err);
+    }
   }
-}
-
 };
+
 
   return (
     <SafeAreaView className="flex-1 bg-white">

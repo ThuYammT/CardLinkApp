@@ -67,31 +67,32 @@ export default function CropScreen() {
   }));
 
   // 📤 Upload helper
-  const uploadToCloudinary = async (uri: string) => {
-    const base64 = await FileSystem.readAsStringAsync(uri, {
-  encoding: "base64",
-});
+  // 📤 Upload helper (fixed for SDK 54+)
+const uploadToCloudinary = async (uri: string) => {
+  const data = new FormData();
+  data.append("file", {
+    uri,
+    type: "image/jpeg",
+    name: "upload.jpg",
+  } as any);
+  data.append("upload_preset", UPLOAD_PRESET);
 
-
-    const data = new FormData();
-    data.append("file", `data:image/jpeg;base64,${base64}`);
-    data.append("upload_preset", UPLOAD_PRESET);
-
-    const res = await fetch(
-      `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-      {
-        method: "POST",
-        body: data,
-      }
-    );
-
-    const json = await res.json();
-    if (json.secure_url) {
-      return json.secure_url;
-    } else {
-      throw new Error("Cloudinary upload failed: " + JSON.stringify(json));
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+    {
+      method: "POST",
+      body: data,
     }
-  };
+  );
+
+  const json = await res.json();
+  if (json.secure_url) {
+    return json.secure_url;
+  } else {
+    throw new Error("Cloudinary upload failed: " + JSON.stringify(json));
+  }
+};
+
 
   // Confirm crop
   const handleConfirm = async () => {

@@ -15,8 +15,7 @@ import * as SecureStore from "expo-secure-store";
 export default function AddContactScreen() {
   const navigation = useNavigation();
   const router = useRouter();
-  const { imageUri } = useLocalSearchParams(); // 📸 Cloudinary URL
-
+  const { imageUri, contact: contactParam } = useLocalSearchParams();
   const [contact, setContact] = useState({
     firstName: "",
     lastName: "",
@@ -31,9 +30,16 @@ export default function AddContactScreen() {
     cardImage: imageUri as string, // 🔑 store the scanned card image
   });
 
-  useLayoutEffect(() => {
-    navigation.setOptions({ headerShown: false });
-  }, []);
+  useEffect(() => {
+  if (contactParam) {
+    try {
+      const parsedContact = JSON.parse(contactParam as string);
+      setContact(parsedContact);
+    } catch (e) {
+      console.warn("Failed to parse contactParam:", e);
+    }
+  }
+}, [contactParam]);
   const [ocrResult, setOcrResult] = useState<any>(null);
   // 🔍 Run OCR on Cloudinary image
   useEffect(() => {
@@ -59,21 +65,25 @@ export default function AddContactScreen() {
 
     console.log("✅ OCR result:", data);
 
-    setOcrResult(data); // 👈 save full OCR response
+    // 🔑 parsed fields
+    const parsed = data.parsed || {};
+
+    // 👀 keep raw for debugging / review page
+    setOcrResult(data);
 
     setContact((prev) => ({
       ...prev,
-      firstName: data.firstName?.value || "",
-      lastName: data.lastName?.value || "",
-      nickname: data.nickname?.value || "",
-      position: data.position?.value || "",
-      phone: data.phone?.value || "",
-      email: data.email?.value || "",
-      company: data.company?.value || "",
-      website: data.website?.value || "",
-      notes: data.notes?.value || "",
-      additionalPhones: Array.isArray(data.additionalPhones)
-        ? data.additionalPhones.map((p: any) => p.value || "")
+      firstName: parsed.firstName?.value || "",
+      lastName: parsed.lastName?.value || "",
+      nickname: parsed.nickname?.value || "",
+      position: parsed.position?.value || "",
+      phone: parsed.phone?.value || "",
+      email: parsed.email?.value || "",
+      company: parsed.company?.value || "",
+      website: parsed.website?.value || "",
+      notes: parsed.notes?.value || "",
+      additionalPhones: Array.isArray(parsed.additionalPhones)
+        ? parsed.additionalPhones.map((p: any) => p.value || "")
         : [],
       cardImage: cloudinaryUrl,
     }));
@@ -82,6 +92,7 @@ export default function AddContactScreen() {
     Alert.alert("Error", err.message || "OCR processing failed");
   }
 };
+
 
 
   // 💾 Save contact with duplicate check
@@ -198,13 +209,29 @@ export default function AddContactScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <View className="bg-blue-900 px-6 py-4 flex-row items-center">
-        <TouchableOpacity onPress={() => router.back()}>
-          <FontAwesome name="arrow-left" size={20} color="white" />
-        </TouchableOpacity>
-        <Text className="text-white text-xl font-nunito ml-4">Add</Text>
-      </View>
-      
+      <View className="bg-blue-900 px-6 py-4 flex-row items-center justify-between">
+  <TouchableOpacity onPress={() => router.back()}>
+    <FontAwesome name="arrow-left" size={20} color="white" />
+  </TouchableOpacity>
+  <Text className="text-white text-xl font-nunito">Add</Text>
+  {ocrResult && (
+    <TouchableOpacity
+      onPress={() =>
+        router.push({
+          pathname: "/ocr-debug",
+          params: {
+            contact: JSON.stringify(contact),
+            ocrData: JSON.stringify(ocrResult),
+          },
+        })
+      }
+    >
+      <Text style={{ color: "white", fontWeight: "bold" }}>Review OCR</Text>
+    </TouchableOpacity>
+  )}
+</View>
+
+
 
       <ScrollView contentContainerStyle={{ padding: 20, flexGrow: 1 }}>
         <View className="bg-blue-100 rounded-2xl p-4">
