@@ -4,7 +4,7 @@ import {
   CameraView,
   useCameraPermissions,
 } from "expo-camera";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy"; // ✅ use legacy API to avoid deprecation warning
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { useNavigation, useRouter } from "expo-router";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -18,128 +18,140 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
- 
+
 // 🔑 Cloudinary config
 const CLOUD_NAME = "dwmav1imw"; // your Cloudinary cloud name
 const UPLOAD_PRESET = "ml_default"; // your unsigned preset
- 
+
 export default function ScanScreen() {
   const [facing, setFacing] = useState<CameraType>("back");
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
   const router = useRouter();
   const navigation = useNavigation();
-  const [capturing, setCapturing] = useState(false); // ✅ state for popup loading
- 
+  const [capturing, setCapturing] = useState(false);
+
   // 🧼 Hide top bar
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, []);
- 
+
   if (!permission) return <View />;
   if (!permission.granted) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={styles.message}>We need your permission to show the camera</Text>
+        <Text style={styles.message}>
+          We need your permission to show the camera
+        </Text>
         <TouchableOpacity style={styles.grantBtn} onPress={requestPermission}>
           <Text style={styles.text}>Grant Permission</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
- 
+
   // 📤 Upload helper
   const uploadToCloudinary = async (uri: string) => {
-    const base64 = await FileSystem.readAsStringAsync(uri, {
-  encoding: "base64",
-});
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
 
- 
-    const data = new FormData();
-    data.append("file", `data:image/jpeg;base64,${base64}`);
-    data.append("upload_preset", UPLOAD_PRESET);
- 
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-      method: "POST",
-      body: data,
-    });
- 
-    const json = await res.json();
-    if (json.secure_url) {
-      return json.secure_url;
-    } else {
-      throw new Error("Cloudinary upload failed: " + JSON.stringify(json));
+      const data = new FormData();
+      data.append("file", `data:image/jpeg;base64,${base64}`);
+      data.append("upload_preset", UPLOAD_PRESET);
+
+      const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+        {
+          method: "POST",
+          body: data,
+        }
+      );
+
+      const json = await res.json();
+      if (json.secure_url) {
+        return json.secure_url;
+      } else {
+        console.error("❌ Cloudinary upload failed:", json);
+        throw new Error("Cloudinary upload failed");
+      }
+    } catch (err) {
+      console.error("❌ uploadToCloudinary error:", err);
+      throw err;
     }
   };
- 
+
   // 📸 Capture image → crop → upload → go to add-contact
   const takePicture = async () => {
     if (cameraRef.current && !capturing) {
       try {
-        setCapturing(true); // lock capture
- 
+        setCapturing(true);
+
         const photo = await cameraRef.current.takePictureAsync({ quality: 1 });
-        console.log("Captured URI:", photo.uri);
- 
-        const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+        console.log("📸 Captured URI:", photo.uri);
+
+        const { width: screenWidth, height: screenHeight } =
+          Dimensions.get("window");
         const frameWidth = screenWidth * 0.9;
         const frameHeight = frameWidth * 0.6;
- 
+
         const scaleX = photo.width / screenWidth;
         const scaleY = photo.height / screenHeight;
- 
+
         const cropRegion = {
-          originX: (screenWidth * 0.05) * scaleX,
+          originX: screenWidth * 0.05 * scaleX,
           originY: (screenHeight / 2 - frameHeight / 2) * scaleY,
           width: frameWidth * scaleX,
           height: frameHeight * scaleY,
         };
- 
-        console.log("Crop region:", cropRegion);
- 
+
+        console.log("✂️ Crop region:", cropRegion);
+
         const cropped = await manipulateAsync(
           photo.uri,
           [{ crop: cropRegion }],
           { compress: 1, format: SaveFormat.JPEG }
         );
- 
+
         console.log("✅ Cropped URI:", cropped.uri);
- 
+
         const cloudinaryUrl = await uploadToCloudinary(cropped.uri);
         console.log("✅ Cloudinary URL:", cloudinaryUrl);
- 
-        // 👉 navigate to add-contact
+
         router.push({
           pathname: "/add-contact",
           params: { imageUri: cloudinaryUrl },
         });
       } catch (err) {
-        Alert.alert("Error", "Failed to capture or crop image.");
-        console.error(err);
-        setCapturing(false); // unlock if failed
+        console.error("❌ takePicture failed:", err);
+        Alert.alert("Error", "Failed to capture, crop, or upload image.");
+        setCapturing(false);
       }
     }
   };
- 
+
   const toggleCameraFacing = () => {
     setFacing((cur) => (cur === "back" ? "front" : "back"));
   };
- 
+
   return (
     <SafeAreaView style={styles.container}>
-      <CameraView style={styles.camera} facing={facing} ref={cameraRef} ratio="16:9">
+      <CameraView
+        style={styles.camera}
+        facing={facing}
+        ref={cameraRef}
+        ratio="16:9"
+      >
         {/* 🔙 Back Button */}
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backBtn}
-        >
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <FontAwesome name="arrow-left" size={20} color="white" />
         </TouchableOpacity>
- 
+
         <View style={styles.overlayContainer}>
           {/* Frame */}
           <View style={styles.cardFrame} />
- 
+
           {/* Buttons */}
           <View style={styles.buttonRow}>
             <TouchableOpacity
@@ -149,33 +161,33 @@ export default function ScanScreen() {
             >
               <FontAwesome name="refresh" size={22} color="white" />
             </TouchableOpacity>
- 
+
             <TouchableOpacity
               style={[styles.captureBtn, capturing && { opacity: 0.5 }]}
               onPress={takePicture}
-              disabled={capturing} // ✅ disable while busy
+              disabled={capturing}
             >
               <FontAwesome name="camera" size={28} color="white" />
             </TouchableOpacity>
           </View>
         </View>
       </CameraView>
- 
+
       {/* 🔥 Popup Loader Overlay */}
       {capturing && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="white" />
-          <Text style={styles.loadingText}>Image captured… Loading</Text>
+          <Text style={styles.loadingText}>Image captured… Uploading</Text>
         </View>
       )}
     </SafeAreaView>
   );
 }
- 
+
 const { width } = Dimensions.get("window");
 const frameWidth = width * 0.9;
 const frameHeight = frameWidth * 0.6;
- 
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "black" },
   camera: { flex: 1 },
@@ -206,7 +218,7 @@ const styles = StyleSheet.create({
   },
   message: { color: "#333", fontSize: 16, textAlign: "center", marginBottom: 20 },
   text: { color: "white", fontSize: 16 },
- 
+
   // 🔙 Back button
   backBtn: {
     position: "absolute",
@@ -217,7 +229,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 8,
   },
- 
+
   // 🔥 Popup loader styles
   loadingOverlay: {
     position: "absolute",

@@ -34,7 +34,7 @@ export default function AddContactScreen() {
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, []);
-
+  const [ocrResult, setOcrResult] = useState<any>(null);
   // 🔍 Run OCR on Cloudinary image
   useEffect(() => {
     if (imageUri) {
@@ -43,51 +43,46 @@ export default function AddContactScreen() {
   }, [imageUri]);
 
   const handleOCR = async (cloudinaryUrl: string) => {
-    try {
-      const token = await SecureStore.getItemAsync("userToken");
+  try {
+    const token = await SecureStore.getItemAsync("userToken");
+    const response = await fetch("https://cardlink.onrender.com/api/ocr", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ imageUrl: cloudinaryUrl }),
+    });
 
-      // send Cloudinary URL to backend for OCR
-      const response = await fetch("https://cardlink.onrender.com/api/ocr", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ imageUrl: cloudinaryUrl }),
-      });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "OCR failed");
 
-      const data = await response.json();
+    console.log("✅ OCR result:", data);
 
-      if (!response.ok) {
-        console.log("❌ OCR failed:", data);
-        throw new Error(data.message || "OCR processing failed");
-      }
+    setOcrResult(data); // 👈 save full OCR response
 
-      console.log("✅ OCR result:", data);
+    setContact((prev) => ({
+      ...prev,
+      firstName: data.firstName?.value || "",
+      lastName: data.lastName?.value || "",
+      nickname: data.nickname?.value || "",
+      position: data.position?.value || "",
+      phone: data.phone?.value || "",
+      email: data.email?.value || "",
+      company: data.company?.value || "",
+      website: data.website?.value || "",
+      notes: data.notes?.value || "",
+      additionalPhones: Array.isArray(data.additionalPhones)
+        ? data.additionalPhones.map((p: any) => p.value || "")
+        : [],
+      cardImage: cloudinaryUrl,
+    }));
+  } catch (err: any) {
+    console.error("❌ OCR error:", err);
+    Alert.alert("Error", err.message || "OCR processing failed");
+  }
+};
 
-      // update contact with OCR data
-        setContact((prev) => ({
-          ...prev,
-          firstName: data.firstName?.value || "",
-          lastName: data.lastName?.value || "",
-          nickname: data.nickname?.value || "",
-          position: data.position?.value || "",
-          phone: data.phone?.value || "",
-          email: data.email?.value || "",
-          company: data.company?.value || "",
-          website: data.website?.value || "",
-          notes: data.notes?.value || "",
-          additionalPhones: Array.isArray(data.additionalPhones)
-            ? data.additionalPhones.map((p: any) => p.value || "")
-            : [],
-          cardImage: cloudinaryUrl,
-        }));
-
-    } catch (error: any) {
-      console.error("❌ OCR error:", error);
-      Alert.alert("Error", error.message || "OCR processing failed");
-    }
-  };
 
   // 💾 Save contact with duplicate check
   const handleSave = async () => {
@@ -209,6 +204,7 @@ export default function AddContactScreen() {
         </TouchableOpacity>
         <Text className="text-white text-xl font-nunito ml-4">Add</Text>
       </View>
+      
 
       <ScrollView contentContainerStyle={{ padding: 20, flexGrow: 1 }}>
         <View className="bg-blue-100 rounded-2xl p-4">
