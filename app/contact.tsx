@@ -1,147 +1,205 @@
 // app/contact.tsx
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import { router, usePathname, useRouter } from "expo-router";
-import { runOnJS } from "react-native-reanimated";
+import { useFocusEffect } from "@react-navigation/native";
+import { useNavigation, usePathname, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import React, { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import {
+  ActionSheetIOS,
   ActivityIndicator,
   Alert,
+  FlatList,
+  Keyboard,
+  Linking,
+  Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from "react-native-reanimated";
+import AnimatedSwipeableRow from "../app/AnimatedSwipeableRow";
 
 /* ---------- Theme ---------- */
 const BRAND_BLUE = "#213BBB";
-const LIGHT_BG = "#F6F7FB";
+const ICON_BLUE = "#1996fc";
 const STAR_YELLOW = "#F4C430";
+const CARD_BORDER = "#bfdbfe";
 
 /* ---------- Types ---------- */
 type Contact = {
-  cardImage: string;
+  cardImage?: string;
   _id: string;
   firstName: string;
   lastName: string;
-  phone: string;
-  email: string;
-  company: string;
+  phone?: string;
+  email?: string;
+  company?: string;
   website?: string;
   notes?: string;
-  isFavorite: boolean;
+  isFavorite?: boolean;
   nickname?: string;
   position?: string;
   additionalPhones?: string[];
   createdAt?: string;
 };
 
-export default function Contacts() {
-  const navigation = useNavigation();
+const safe = (v?: string) => (v && v.trim().length ? v : "—");
+
+export default function ContactScreen() {
+  const router = useRouter();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigation = useNavigation();
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: false }); // hides default
+  }, [navigation]);
 
-  // filter UI state
+  // search + filters
+  const [query, setQuery] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [showFavOnly, setShowFavOnly] = useState(false);
   const [hasPhone, setHasPhone] = useState(false);
   const [hasEmail, setHasEmail] = useState(false);
   const [company, setCompany] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"newest" | "az" | "company">("newest");
-  const cardStyle = {
-  backgroundColor: "white",
-  borderRadius: 16,
-  paddingVertical: 16,
-  paddingHorizontal: 12,
-  marginBottom: 16,
-  borderWidth: 1,
-  borderColor: "#bfdbfe", // border-blue-100
-  // iOS shadow
-  shadowColor: "#000",
-  shadowOpacity: 0.08,
-  shadowRadius: 6,
-  shadowOffset: { width: 0, height: 4 },
-  // Android shadow
-  elevation: 3,
-};
 
-function SwipeableRow({
-  children,
-  onDelete,
-  onFav,
-}: {
-  children: React.ReactNode;
-  onDelete: () => void;
-  onFav: () => void;
-}) {
-  const translateX = useSharedValue(0);
-
-  const pan = Gesture.Pan()
-    .onUpdate((e) => {
-      translateX.value = e.translationX;
-    })
-    .onEnd(() => {
-      if (translateX.value < -80) {
-        runOnJS(onDelete)(); // ✅ safely call JS
-      } else if (translateX.value > 80) {
-        runOnJS(onFav)(); // ✅ safely call JS
-      }
-      translateX.value = withSpring(0);
-    });
-
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
-
-  return (
-    <GestureDetector gesture={pan}>
-      <Animated.View style={style}>{children}</Animated.View>
-    </GestureDetector>
-  );
-}
-
-  useLayoutEffect(() => {
-    navigation.setOptions({ headerShown: false });
-  }, []);
-
-  useEffect(() => {
-  const fetchContacts = async () => {
-    const token = await SecureStore.getItemAsync("userToken");
-    if (!token) return; // ✅ safety check
-
+  /* ---------- Fetch ---------- */
+  const fetchContacts = useCallback(async () => {
+    setLoading(true);
     try {
+      const token = await SecureStore.getItemAsync("userToken");
       const res = await fetch("https://cardlink.onrender.com/api/contacts", {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       const data = await res.json();
-
-      if (res.ok && Array.isArray(data)) {
-        setContacts(data); // ✅ 
-      } else {
-        console.error("Fetch error:", data?.message);
-      }
-    } catch (err) {
-      console.error("Error loading contacts:", err);
+      if (Array.isArray(data)) setContacts(data);
+    } catch (e) {
+      console.error("Failed to fetch contacts:", e);
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchContacts();
+      return undefined;
+    }, [fetchContacts])
+  );
+
+  /* ---------- Favorite toggle ---------- */
+  const toggleFavorite = async (contact: Contact) => {
+  try {
+    const token = await SecureStore.getItemAsync("userToken");
+
+    const res = await fetch(
+      `https://cardlink.onrender.com/api/contacts/${contact._id}/favorite`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ isFavorite: !contact.isFavorite }),
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error("Failed to update favorite");
+    }
+
+    const updated = await res.json();
+
+    // ✅ Only update state after backend confirms
+    setContacts((prev) =>
+      prev.map((c) => (c._id === updated._id ? updated : c))
+    );
+  } catch (err) {
+    console.error("❌ toggleFavorite error:", err);
+    Alert.alert("Error", "Could not update favorite.");
+  }
+};
+
+
+  /* ---------- Call ---------- */
+  const normalizePhone = (n: string) => n.replace(/[()\-\s]/g, "");
+  const getAllNumbers = (c: Contact) =>
+    Array.from(
+      new Set(
+        [c.phone, ...(c.additionalPhones || [])]
+          .map((n) => (n || "").trim())
+          .filter(Boolean)
+      )
+    );
+
+  const openDialer = (raw?: string) => {
+    if (!raw) return Alert.alert("No phone", "This contact has no phone number.");
+    const url = `tel:${normalizePhone(raw)}`;
+    Linking.openURL(url).catch(() =>
+      Alert.alert("Error", "Could not open dialer.")
+    );
   };
 
-  fetchContacts();
-}, []);
+  const chooseAndCall = (c: Contact) => {
+  const nums = getAllNumbers(c);
+  if (nums.length === 0) {
+    return Alert.alert("No phone", "This contact has no phone number.");
+  }
+  if (nums.length === 1) {
+    return openDialer(nums[0]);
+  }
+
+  if (Platform.OS === "ios") {
+    // 👇 Fix: show immediately without delay
+    setTimeout(() => {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: `Call ${`${c.firstName} ${c.lastName}`.trim()}`,
+          options: [...nums, "Cancel"],
+          cancelButtonIndex: nums.length,
+        },
+        (i) => {
+          if (i !== undefined && i >= 0 && i < nums.length) {
+            openDialer(nums[i]);
+          }
+        }
+      );
+    }, 0);
+  } else {
+    Alert.alert("Call number", "Choose a number", [
+      ...nums.map((n) => ({ text: n, onPress: () => openDialer(n) })),
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+};
 
 
+  /* ---------- Delete ---------- */
+  const confirmDelete = (contactId: string) =>
+    Alert.alert("Delete Contact", "Are you sure?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => handleDelete(contactId) },
+    ]);
 
-  // unique companies for filter
+  const handleDelete = async (contactId: string) => {
+    try {
+      const token = await SecureStore.getItemAsync("userToken");
+      const res = await fetch(`https://cardlink.onrender.com/api/contacts/${contactId}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (res.ok) setContacts((prev) => prev.filter((c) => c._id !== contactId));
+      else Alert.alert("Error", "Failed to delete contact.");
+    } catch {
+      Alert.alert("Error", "Something went wrong.");
+    }
+  };
+
+  /* ---------- Filtering + sorting ---------- */
   const companies = useMemo(() => {
     const set = new Set(
       contacts
@@ -151,10 +209,25 @@ function SwipeableRow({
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [contacts]);
 
-  // derived list with filters
   const displayed = useMemo(() => {
     let base = [...contacts];
-
+    const q = query.toLowerCase().trim();
+    if (q) {
+      base = base.filter((c) =>
+        [
+          c.firstName,
+          c.lastName,
+          c.company,
+          c.email,
+          c.phone,
+          c.nickname,
+          c.position,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q)
+      );
+    }
     if (showFavOnly) base = base.filter((c) => c.isFavorite);
     if (hasPhone) base = base.filter((c) => !!c.phone?.trim());
     if (hasEmail) base = base.filter((c) => !!c.email?.trim());
@@ -167,328 +240,254 @@ function SwipeableRow({
     } else if (sortBy === "company") {
       base.sort((a, b) => (a.company || "").localeCompare(b.company || ""));
     } else {
-      // newest by createdAt
       base.sort(
         (a, b) =>
           new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
       );
     }
     return base;
-  }, [contacts, showFavOnly, hasPhone, hasEmail, company, sortBy]);
+  }, [contacts, query, showFavOnly, hasPhone, hasEmail, company, sortBy]);
 
-  /* ---------- Actions ---------- */
-  const confirmDelete = (contactId: string) => {
-    Alert.alert("Delete Contact", "Are you sure you want to delete this contact?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => handleDelete(contactId) },
-    ]);
-  };
+  /* ---------- Render ---------- */
+  const renderItem = ({ item: c }: { item: Contact }) => (
+    <AnimatedSwipeableRow
+      onCall={() => chooseAndCall(c)}
+      onDelete={() => confirmDelete(c._id)}
+      hasPhone={getAllNumbers(c).length > 0}
+    >
+      <TouchableOpacity
+        onPress={() =>
+          router.push({
+            pathname: "/contact-detail",
+            params: {
+              ...c,
+              additionalPhones: JSON.stringify(c.additionalPhones || []), // ✅ stringify array
+              isFavorite: String(c.isFavorite ?? false),                  // ✅ stringify boolean
+            },
+          })
+        }
+      >
+        <View style={styles.card}>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View style={styles.avatar}>
+              <Text style={{ color: "#fff", fontWeight: "800" }}>
+                {(c.firstName?.[0] || "").toUpperCase()}
+                {(c.lastName?.[0] || "").toUpperCase()}
+              </Text>
+            </View>
 
-  const handleDelete = async (contactId: string) => {
-    const token = await SecureStore.getItemAsync("userToken");
-    try {
-      const res = await fetch(`https://cardlink.onrender.com/api/contacts/${contactId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        setContacts((prev) => prev.filter((c) => c._id !== contactId));
-        Alert.alert("Deleted", "Contact successfully deleted.");
-      } else {
-        Alert.alert("Error", "Failed to delete contact.");
-      }
-    } catch (err) {
-      console.error("Error deleting contact:", err);
-      Alert.alert("Error", "Something went wrong.");
-    }
-  };
+            <View style={{ marginLeft: 12, flex: 1 }}>
+              <Text style={styles.name}>{c.firstName} {c.lastName}</Text>
+              {!!c.nickname && <Text style={styles.subtitle}>{c.nickname}</Text>}
+            </View>
 
-  const toggleFavorite = async (contact: Contact) => {
-    // optimistic UI
-    setContacts((prev) =>
-      prev.map((c) => (c._id === contact._id ? { ...c, isFavorite: !c.isFavorite } : c))
-    );
+            <TouchableOpacity onPress={() => toggleFavorite(c)} style={styles.starPill}>
+              <FontAwesome
+                name={c.isFavorite ? "star" : "star-o"}
+                size={16}
+                color={c.isFavorite ? STAR_YELLOW : "#c9d2f6"}
+              />
+            </TouchableOpacity>
+          </View>
 
-    try {
-      const token = await SecureStore.getItemAsync("userToken");
-      await fetch(`https://cardlink.onrender.com/api/contacts/${contact._id}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ isFavorite: !contact.isFavorite }),
-      });
-    } catch (e) {
-      // rollback if needed
-      setContacts((prev) =>
-        prev.map((c) => (c._id === contact._id ? { ...c, isFavorite: contact.isFavorite } : c))
-      );
-      Alert.alert("Error", "Could not update favorite.");
-    }
-  };
+          <View style={{ marginTop: 10 }}>
+            <View style={styles.row}>
+              <FontAwesome name="phone" size={14} color={ICON_BLUE} />
+              <Text style={styles.rowText}>{safe(c.phone)}</Text>
+            </View>
+            <View style={styles.row}>
+              <MaterialIcons name="email" size={14} color={ICON_BLUE} />
+              <Text style={styles.rowText}>{safe(c.email)}</Text>
+            </View>
+            <View style={styles.row}>
+              <FontAwesome name="briefcase" size={14} color={ICON_BLUE} />
+              <Text style={styles.rowText}>{safe(c.company)}</Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </AnimatedSwipeableRow>
+  );
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: LIGHT_BG }}>
-      {/* Header: title + actions (Add pill, Filter icon) */}
-      <View
-        style={{ backgroundColor: BRAND_BLUE }}
-        className="px-4 py-6 flex-row justify-between items-center"
-      >
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
+      {/* Header */}
+      <View style={{ backgroundColor: BRAND_BLUE }} className="px-4 py-6">
         <Text className="text-white text-2xl font-nunito font-bold">Contacts</Text>
+      </View>
 
-        <View className="flex-row items-center">
-          {/* Add pill */}
-          <TouchableOpacity
-            onPress={() => router.push("/add-contact")}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              backgroundColor: "#fff",
-              paddingVertical: 6,
-              paddingHorizontal: 12,
-              borderRadius: 20,
-              marginRight: 12,
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Add contact"
-          >
-            <FontAwesome name="plus" size={14} color={BRAND_BLUE} />
-            <Text style={{ color: BRAND_BLUE, marginLeft: 6, fontWeight: "600" }}>Add</Text>
-          </TouchableOpacity>
-
-          {/* Filter icon */}
-          <TouchableOpacity
-            onPress={() => setFilterOpen(true)}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityRole="button"
-            accessibilityLabel="Open filters"
-          >
-            <FontAwesome name="filter" size={22} color="#fff" />
+      {/* Search */}
+      <View style={{ padding: 16 }}>
+        <View style={styles.searchBox}>
+          <MaterialIcons name="search" size={20} color="#9ca3af" />
+          <TextInput
+            placeholder="Search contacts"
+            value={query}
+            onChangeText={setQuery}
+            style={{ flex: 1, height: 44, paddingLeft: 8 }}
+            returnKeyType="search"
+            onSubmitEditing={() => Keyboard.dismiss()}
+          />
+          <TouchableOpacity onPress={() => setFilterOpen(true)}>
+            <FontAwesome name="filter" size={16} color={BRAND_BLUE} />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* List */}
-      <ScrollView className="px-4 mt-4 mb-36">
-        {loading ? (
+      {loading ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
           <ActivityIndicator size="large" color={BRAND_BLUE} />
-        ) : displayed.length === 0 ? (
-          <Text className="text-center text-gray-600 font-nunito">No contacts found.</Text>
-        ) : (
-          displayed.map((c) => (
-              <SwipeableRow
-              key={c._id}
-              onDelete={() => confirmDelete(c._id)}
-              onFav={() => toggleFavorite(c)}
-            >
-              <TouchableOpacity
-                onPress={() =>
-                  router.push({
-                    pathname: "/contact-detail",
-                    params: {
-                      _id: c._id,
-                      firstName: c.firstName,
-                      lastName: c.lastName,
-                      phone: c.phone,
-                      email: c.email,
-                      company: c.company,
-                      website: c.website || "",
-                      notes: c.notes || "",
-                      nickname: c.nickname || "",
-                      position: c.position || "",
-                      additionalPhones: JSON.stringify(c.additionalPhones || []),
-                      createdAt: c.createdAt || "",
-                      cardImage: c.cardImage || "",
-                      isFavorite: String(c.isFavorite),
-                    },
-                  })
-                }
-              >
-              <View style={cardStyle}>
-                <View className="flex-row items-center">
-                  <View className="w-10 h-10 bg-blue-200 rounded-full justify-center items-center">
-                    <Text className="text-white font-bold text-sm">
-                      {c.firstName?.[0]}
-                      {c.lastName?.[0]}
-                    </Text>
-                  </View>
-                  <View className="ml-3 flex-1">
-                    <Text className="text-xl font-bold text-blue-900 font-nunito">
-                      {c.firstName} {c.lastName}
-                    </Text>
-                    <Text className="text-xs text-gray-500">{c.company}</Text>
-                  </View>
+        </View>
+      ) : (
+        <FlatList
+          data={displayed}
+          keyExtractor={(c) => c._id}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 96 }}
+        />
+      )}
 
-                  {/* Optional star indicator */}
-                  <FontAwesome
-                    name={c.isFavorite ? "star" : "star-o"}
-                    size={18}
-                    color={c.isFavorite ? "#F4C430" : "#cbd5e1"}
-                  />
-                </View>
-
-                <View className="mt-3 space-y-1">
-                  <View className="flex-row items-center">
-                    <FontAwesome name="phone" size={14} color="#1996fc" />
-                    <Text className="ml-2 text-sm text-gray-800">{c.phone || "—"}</Text>
-                  </View>
-                  <View className="flex-row items-center">
-                    <MaterialIcons name="email" size={14} color="#1996fc" />
-                    <Text className="ml-2 text-sm text-gray-800">{c.email || "—"}</Text>
-                  </View>
-                  <View className="flex-row items-center">
-                    <FontAwesome name="briefcase" size={14} color="#1996fc" />
-                    <Text className="ml-2 text-sm text-gray-800">{c.company || "—"}</Text>
-                  </View>
-                </View>
-              </View>
-
-              </TouchableOpacity>
-          </SwipeableRow>
-          ))
-        )}
-      </ScrollView>
-
-      {/* Filter sheet (tap outside to close) — sits ABOVE nav */}
+      {/* Filter modal */}
       {filterOpen && (
+      <Pressable style={styles.overlay} onPress={() => setFilterOpen(false)}>
         <Pressable
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.25)",
-            justifyContent: "flex-end",
-            zIndex: 999, // ensure above
-          }}
-          onPress={() => setFilterOpen(false)}
+          style={[styles.filterCard, { marginBottom: 100 }]} // 👈 stays above nav
+          onPress={(e) => e.stopPropagation()} // 👈 stops outside tap closing
         >
-          <Pressable
-            style={{
-              backgroundColor: "#fff",
-              borderTopLeftRadius: 16,
-              borderTopRightRadius: 16,
-              padding: 16,
-            }}
-            onPress={(e) => e.stopPropagation()}
+          <ScrollView
+            contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+            showsVerticalScrollIndicator={true}
+            indicatorStyle="black"  // or "white" for dark background
           >
             <Text className="text-base font-nunito mb-3">Filters</Text>
+            <ToggleRow label="Favorites only" checked={showFavOnly} onPress={() => setShowFavOnly((v) => !v)} />
+            <ToggleRow label="Has phone" checked={hasPhone} onPress={() => setHasPhone((v) => !v)} />
+            <ToggleRow label="Has email" checked={hasEmail} onPress={() => setHasEmail((v) => !v)} />
 
-            {/* Toggles */}
-            <TouchableOpacity
-              onPress={() => setShowFavOnly((v) => !v)}
-              style={{ paddingVertical: 12, flexDirection: "row", alignItems: "center" }}
-            >
-              <FontAwesome
-                name={showFavOnly ? "check-square-o" : "square-o"}
-                size={18}
-                color="#111"
-              />
-              <Text style={{ marginLeft: 10 }}>Favorites only</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setHasPhone((v) => !v)}
-              style={{ paddingVertical: 12, flexDirection: "row", alignItems: "center" }}
-            >
-              <FontAwesome name={hasPhone ? "check-square-o" : "square-o"} size={18} color="#111" />
-              <Text style={{ marginLeft: 10 }}>Has phone</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setHasEmail((v) => !v)}
-              style={{ paddingVertical: 12, flexDirection: "row", alignItems: "center" }}
-            >
-              <FontAwesome name={hasEmail ? "check-square-o" : "square-o"} size={18} color="#111" />
-              <Text style={{ marginLeft: 10 }}>Has email</Text>
-            </TouchableOpacity>
-
-            {/* Company chips */}
             {companies.length > 0 && (
               <>
-                <View style={{ height: 1, backgroundColor: "#eee", marginVertical: 12 }} />
+                <Divider />
                 <Text className="text-base font-nunito mb-2">Company</Text>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                  <TouchableOpacity
-                    onPress={() => setCompany(null)}
-                    style={{
-                      paddingVertical: 6,
-                      paddingHorizontal: 12,
-                      borderRadius: 999,
-                      backgroundColor: company === null ? BRAND_BLUE : "#f1f5f9",
-                    }}
-                  >
-                    <Text style={{ color: company === null ? "#fff" : "#111" }}>All</Text>
-                  </TouchableOpacity>
-
+                  <Chip label="All" active={company === null} onPress={() => setCompany(null)} />
                   {companies.map((co) => (
-                    <TouchableOpacity
-                      key={co}
-                      onPress={() => setCompany(co)}
-                      style={{
-                        paddingVertical: 6,
-                        paddingHorizontal: 12,
-                        borderRadius: 999,
-                        backgroundColor: company === co ? BRAND_BLUE : "#f1f5f9",
-                      }}
-                    >
-                      <Text style={{ color: company === co ? "#fff" : "#111" }}>{co}</Text>
-                    </TouchableOpacity>
+                    <Chip key={co} label={co} active={company === co} onPress={() => setCompany(co)} />
                   ))}
                 </View>
               </>
             )}
 
-            {/* Sort */}
-            <View style={{ height: 1, backgroundColor: "#eee", marginVertical: 12 }} />
+            <Divider />
             <Text className="text-base font-nunito mb-2">Sort by</Text>
-            <View style={{ flexDirection: "row", columnGap: 10, flexWrap: "wrap" }}>
+            <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
               <Chip label="Newest" active={sortBy === "newest"} onPress={() => setSortBy("newest")} />
-              <Chip label="A–Z (Name)" active={sortBy === "az"} onPress={() => setSortBy("az")} />
-              <Chip
-                label="Company (A–Z)"
-                active={sortBy === "company"}
-                onPress={() => setSortBy("company")}
-              />
+              <Chip label="A–Z" active={sortBy === "az"} onPress={() => setSortBy("az")} />
+              <Chip label="Company" active={sortBy === "company"} onPress={() => setSortBy("company")} />
             </View>
 
-            <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 14 }}>
-              <TouchableOpacity onPress={() => setFilterOpen(false)} style={{ padding: 10 }}>
+            {/* ✅ Done button explicitly closes */}
+            <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 20 }}>
+              <TouchableOpacity onPress={() => setFilterOpen(false)} style={{ padding: 12 }}>
                 <Text style={{ color: BRAND_BLUE, fontWeight: "600" }}>Done</Text>
               </TouchableOpacity>
             </View>
-          </Pressable>
+          </ScrollView>
         </Pressable>
-      )}
+      </Pressable>
+    )}
 
-      {/* Pill bottom nav — hidden when the filter is open so sheet never goes under it */}
-      <BottomNav hidden={filterOpen} />
+
+      <BottomNav />
     </SafeAreaView>
   );
 }
 
-/* ---------- Small Chip component ---------- */
-function Chip({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
+/* ---------- Styles ---------- */
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+    minHeight: 108,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#bfdbfe",
+  },
+  name: { fontSize: 18, fontWeight: "700", color: "#1e3a8a" },
+  subtitle: { fontSize: 12, color: "#6b7280", marginTop: 2 },
+  row: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
+  rowText: { color: "#111827", fontSize: 14, marginLeft: 8 },
+  starPill: {
+    backgroundColor: "#f4f6ff",
+    borderWidth: 1,
+    borderColor: "#e3e8ff",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    backgroundColor: "#fff",
+  },
+  overlay: {
+    position: "absolute", left: 0, right: 0, top: 0, bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.25)", justifyContent: "flex-end"
+  },
+  filterCard: {
+  backgroundColor: "#fff",
+  borderTopLeftRadius: 16,
+  borderTopRightRadius: 16,
+  maxHeight: "80%",   
+  marginBottom: 100,  // 
+},
+
+});
+
+/* ---------- Helpers ---------- */
+function Divider() {
+  return <View style={{ height: 1, backgroundColor: "#eef2ff", marginVertical: 12 }} />;
+}
+function ToggleRow({ label, checked, onPress }: { label: string; checked: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity onPress={onPress} style={{ paddingVertical: 12, flexDirection: "row", alignItems: "center" }}>
+      <FontAwesome name={checked ? "check-square-o" : "square-o"} size={18} color="#111" />
+      <Text style={{ marginLeft: 10 }}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity
       onPress={onPress}
       style={{
-        paddingVertical: 8,
+        paddingVertical: 6,
         paddingHorizontal: 12,
-        borderRadius: 10,
+        borderRadius: 999,
         backgroundColor: active ? BRAND_BLUE : "#f1f5f9",
         marginBottom: 8,
+        marginRight: 8,
       }}
     >
       <Text style={{ color: active ? "#fff" : "#111" }}>{label}</Text>
@@ -499,71 +498,36 @@ function Chip({
 /* ---------- BottomNav ---------- */
 function BottomNav({ hidden }: { hidden?: boolean }) {
   if (hidden) return null;
-
-  const pathname = usePathname();
   const router = useRouter();
+  const pathname = usePathname();
 
-  const active: "home" | "contacts" | "calendar" | "profile" =
+  const active: "home" | "contacts" | "profile" =
     pathname.startsWith("/profile")
       ? "profile"
-      : pathname.startsWith("/calendar")
-      ? "calendar"
       : pathname.startsWith("/contact")
       ? "contacts"
       : "home";
 
-  const Item = ({
-    isActive,
-    onPress,
-    icon,
-  }: {
-    isActive?: boolean;
-    onPress: () => void;
-    icon: React.ComponentProps<typeof FontAwesome>["name"];
-  }) =>
+  const Item = ({ isActive, onPress, icon }: { isActive?: boolean; onPress: () => void; icon: React.ComponentProps<typeof FontAwesome>["name"]; }) =>
     isActive ? (
       <TouchableOpacity
         onPress={onPress}
         activeOpacity={0.9}
-        style={{
-          width: 54,
-          height: 54,
-          borderRadius: 27,
-          backgroundColor: "#FFFFFF",
-          alignItems: "center",
-          justifyContent: "center",
-          borderWidth: 2,
-          borderColor: "rgba(255,255,255,0.85)",
-        }}
+        style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(255,255,255,0.85)" }}
       >
         <FontAwesome name={icon} size={20} color={BRAND_BLUE} />
       </TouchableOpacity>
     ) : (
       <TouchableOpacity
         onPress={onPress}
-        style={{
-          width: 54,
-          height: 54,
-          borderRadius: 27,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
+        style={{ width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center" }}
       >
         <FontAwesome name={icon} size={20} color="#FFFFFF" />
       </TouchableOpacity>
     );
 
   return (
-    <View
-      style={{
-        position: "absolute",
-        left: 20,
-        right: 20,
-        bottom: 24,
-        alignItems: "center",
-      }}
-      pointerEvents="box-none"
-    >
+    <View style={{ position: "absolute", left: 20, right: 20, bottom: 24, alignItems: "center" }} pointerEvents="box-none">
       <View
         style={{
           backgroundColor: BRAND_BLUE,
@@ -582,21 +546,33 @@ function BottomNav({ hidden }: { hidden?: boolean }) {
         }}
       >
         <Item icon="home" isActive={active === "home"} onPress={() => router.replace("/home")} />
-        <Item
-          icon="address-book-o"
-          isActive={active === "contacts"}
-          onPress={() => router.replace("/contact")}
-        />
-        <Item
-          icon="calendar-o"
-          isActive={active === "calendar"}
-          onPress={() => router.replace("/calendar")}
-        />
-        <Item
-          icon="user-o"
-          isActive={active === "profile"}
-          onPress={() => router.replace("/profile")}
-        />
+        <Item icon="address-book-o" isActive={active === "contacts"} onPress={() => router.replace("/contact")} />
+
+        {/* Floating Add button */}
+        {active === "contacts" && (
+          <TouchableOpacity
+            onPress={() => router.push("/add-contact")}
+            activeOpacity={0.8}
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 32,
+              backgroundColor: "#FFFFFF",
+              alignItems: "center",
+              justifyContent: "center",
+              marginHorizontal: 8,
+              shadowColor: "#000",
+              shadowOpacity: 0.15,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 4 },
+              elevation: 6,
+            }}
+          >
+            <FontAwesome name="plus" size={22} color={BRAND_BLUE} />
+          </TouchableOpacity>
+        )}
+
+        <Item icon="user-o" isActive={active === "profile"} onPress={() => router.replace("/profile")} />
       </View>
     </View>
   );

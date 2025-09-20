@@ -1,145 +1,208 @@
-// app/home.tsx
-import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import { router, useNavigation, usePathname, useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
-import LottieView from 'lottie-react-native';
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+// pull shark
+import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import * as FileSystem from "expo-file-system/legacy";
+import * as ImagePicker from "expo-image-picker";
+import { router, useNavigation, usePathname, useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
+import LottieView from "lottie-react-native";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  ActionSheetIOS,
   Alert,
+  Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import AnimatedSwipeableRow from "../app/AnimatedSwipeableRow"; // ✅ use your fixed version
 
 type Contact = {
-  cardImage: string;
+  cardImage?: string;
   _id: string;
   firstName: string;
   lastName: string;
-  phone: string;
-  email: string;
-  company: string;
+  phone?: string;
+  email?: string;
+  company?: string;
   website?: string;
   notes?: string;
-  isFavorite: boolean;
+  isFavorite?: boolean;
   nickname?: string;
   position?: string;
   additionalPhones?: string[];
   createdAt?: string;
 };
 
-const BRAND_BLUE = '#213BBB';
-const LIGHT_PANEL = '#CFE4FF';
-
-// Bottom bar colors (dark rail + purple pill like screenshot)
-const NAV_BG = '#161824';
-const NAV_PILL = '#9E7BFF';
-const ICON_INACTIVE = '#C9CCDA';
-const ICON_ACTIVE = '#FFFFFF';
-const LABEL_ACTIVE = '#FFFFFF';
+const BRAND_BLUE = "#213BBB";
+const LIGHT_PANEL = "#CFE4FF";
+const ICON_BLUE = "#1996fc";
+const CARD_BORDER = "#bfdbfe";
+const STAR_YELLOW = "#F4C430";
+const safe = (v?: string) => (v && v.trim().length ? v : "—");
 
 export default function HomeScreen() {
   const navigation = useNavigation();
   const [recentContacts, setRecentContacts] = useState<Contact[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const lottieRef = useRef<LottieView>(null);
-  const cardStyle = {
-  backgroundColor: "white",
-  borderRadius: 16,
-  paddingVertical: 16,
-  paddingHorizontal: 12,
-  marginBottom: 16,
-  borderWidth: 1,
-  borderColor: "#bfdbfe", // border-blue-100
-  // iOS shadow
-  shadowColor: "#000",
-  shadowOpacity: 0.08,
-  shadowRadius: 6,
-  shadowOffset: { width: 0, height: 4 },
-  // Android shadow
-  elevation: 3,
-};
-
 
   useLayoutEffect(() => {
-    navigation.setOptions({ headerShown: false });
+    // @ts-ignore
+    navigation.setOptions?.({ headerShown: false });
   }, []);
 
   useEffect(() => {
     fetchRecentContacts();
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchRecentContacts();
+      return undefined;
+    }, [])
+  );
+
   const fetchRecentContacts = async () => {
     try {
-      const token = await SecureStore.getItemAsync('userToken');
-      const res = await fetch('https://cardlink.onrender.com/api/contacts', {
-        headers: { Authorization: `Bearer ${token}` },
+      const token = await SecureStore.getItemAsync("userToken");
+      const res = await fetch("https://cardlink.onrender.com/api/contacts", {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       const data = await res.json();
       if (Array.isArray(data)) setRecentContacts(data.slice(0, 4));
     } catch (e) {
-      console.error('Failed to fetch recent contacts:', e);
+      console.error("Failed to fetch recent contacts:", e);
     }
   };
 
   const openCamera = () => {
-  setSheetOpen(false);
-  router.push("/scan");
-};
-
+    setSheetOpen(false);
+    router.push("/scan");
+  };
 
   const openGallery = async () => {
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    quality: 1,
-    allowsEditing: false,
-  });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+      allowsEditing: false,
+    });
 
-  if (!result.canceled) {
-    const uri = result.assets[0].uri;
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      // @ts-ignore
+      const dest = `${FileSystem.documentDirectory}selected.jpg`; // ✅ safer string
 
-    try {
-      // ✅ no need to copy, just pass original uri
-      console.log("✅ Selected gallery image:", uri);
-      setSheetOpen(false);
-      router.push({ pathname: "/crop", params: { imageUri: uri } });
-    } catch (err) {
-      console.error("❌ Failed to handle image:", err);
+      try {
+        await FileSystem.copyAsync({ from: uri, to: dest });
+        console.log("✅ Saved gallery image to:", dest);
+
+        setSheetOpen(false);
+        router.push({ pathname: "/crop", params: { imageUri: dest } });
+      } catch (err) {
+        console.error("❌ Failed to copy image:", err);
+        // fallback: send original URI
+        router.push({ pathname: "/crop", params: { imageUri: uri } });
+      }
     }
-  }
-};
 
+  };
+
+
+  /* ---------- Favorites / Call / Delete ---------- */
+  const toggleFavorite = async (contact: Contact) => {
+    setRecentContacts((prev) =>
+      prev.map((c) => (c._id === contact._id ? { ...c, isFavorite: !c.isFavorite } : c))
+    );
+    try {
+      const token = await SecureStore.getItemAsync("userToken");
+      await fetch(`https://cardlink.onrender.com/api/contacts/${contact._id}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ isFavorite: !contact.isFavorite }),
+      });
+    } catch {
+      // revert if fails
+      setRecentContacts((prev) =>
+        prev.map((c) => (c._id === contact._id ? { ...c, isFavorite: contact.isFavorite } : c))
+      );
+      Alert.alert("Error", "Could not update favorite.");
+    }
+  };
+
+  const normalizePhone = (n: string) => n.replace(/[()\-\s]/g, "");
+  const getAllNumbers = (c: Contact) =>
+    Array.from(new Set([c.phone, ...(c.additionalPhones || [])].map(n => (n || "").trim()).filter(Boolean)));
+
+  const openDialer = (raw?: string) => {
+    if (!raw) {
+      Alert.alert("No phone", "This contact has no phone number.");
+      return;
+    }
+    const url = `tel:${normalizePhone(raw)}`;
+    Linking.openURL(url).catch(() => Alert.alert("Error", "Could not open dialer."));
+  };
+
+  const chooseAndCall = (c: Contact) => {
+    const nums = getAllNumbers(c);
+    if (nums.length === 0) return Alert.alert("No phone", "This contact has no phone number.");
+    if (nums.length === 1) return openDialer(nums[0]);
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { title: `Call ${`${c.firstName} ${c.lastName}`.trim()}`, options: [...nums, "Cancel"], cancelButtonIndex: nums.length },
+        (i) => { if (i !== undefined && i >= 0 && i < nums.length) openDialer(nums[i]); }
+      );
+    } else {
+      Alert.alert("Call number", "Choose a number", [
+        ...nums.map(n => ({ text: n, onPress: () => openDialer(n) })),
+        { text: "Cancel", style: "cancel" },
+      ]);
+    }
+  };
+
+  const confirmDelete = (contactId: string) =>
+    Alert.alert("Delete Contact", "Are you sure you want to delete this contact?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => handleDelete(contactId) },
+    ]);
+
+  const handleDelete = async (contactId: string) => {
+    try {
+      const token = await SecureStore.getItemAsync("userToken");
+      const res = await fetch(`https://cardlink.onrender.com/api/contacts/${contactId}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (res.ok) setRecentContacts(prev => prev.filter(c => c._id !== contactId));
+      else Alert.alert("Error", "Failed to delete contact.");
+    } catch {
+      Alert.alert("Error", "Something went wrong.");
+    }
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-white">
       {/* Top Bar */}
-      <View
-        style={{ backgroundColor: BRAND_BLUE }}
-        className="px-4 py-6 flex-row justify-between items-center"
-      >
+      <View style={{ backgroundColor: BRAND_BLUE }} className="px-4 py-6 flex-row items-center">
         <Text className="text-white text-2xl font-nunito">CardLink</Text>
-        <FontAwesome name="filter" size={24} color="white" />
       </View>
 
-      {/* Light blue header panel with animation */}
-      <View
-        style={{ backgroundColor: LIGHT_PANEL }}
-        className="items-center py-8"
-      >
+      {/* Header panel with animation */}
+      <View style={{ backgroundColor: LIGHT_PANEL }} className="items-center py-8">
         <LottieView
           ref={lottieRef}
-          source={require('../assets/animations/NFC_Card_Read.json')}
+          source={require("../assets/animations/NFC_Card_Read.json")}
           autoPlay
           loop
           style={{ width: 240, height: 160 }}
         />
 
-        {/* Single primary action button */}
+        {/* Primary action */}
         <TouchableOpacity
           onPress={() => setSheetOpen(true)}
           activeOpacity={0.9}
@@ -150,7 +213,7 @@ export default function HomeScreen() {
             paddingHorizontal: 18,
             marginTop: 12,
             elevation: 2,
-            shadowColor: '#000',
+            shadowColor: "#000",
             shadowOpacity: 0.15,
             shadowRadius: 6,
             shadowOffset: { width: 0, height: 3 },
@@ -158,16 +221,14 @@ export default function HomeScreen() {
           className="flex-row items-center"
         >
           <FontAwesome name="id-card" size={18} color="#fff" />
-          <Text className="text-white text-[16px] font-semibold ml-2">
-            Add Business Card
-          </Text>
+          <Text className="text-white text-[16px] font-semibold ml-2">Add Business Card</Text>
         </TouchableOpacity>
       </View>
 
       {/* Recent header */}
       <View className="px-4 py-3 flex-row justify-between items-center">
         <Text className="text-lg font-semibold text-gray-700">Recent</Text>
-        <TouchableOpacity onPress={() => router.push('/contact')}>
+        <TouchableOpacity onPress={() => router.push("/contact")}>
           <Text style={{ color: BRAND_BLUE }} className="font-medium">
             View All
           </Text>
@@ -177,81 +238,116 @@ export default function HomeScreen() {
       {/* Recent list */}
       <ScrollView className="px-4 mb-24">
         {recentContacts.map((c) => (
-          <TouchableOpacity
+          <AnimatedSwipeableRow
             key={c._id}
-            onPress={() =>
-              router.push({
-                pathname: '/contact-detail',
-                params: {
-                      _id: c._id,
-                      firstName: c.firstName,
-                      lastName: c.lastName,
-                      phone: c.phone,
-                      email: c.email,
-                      company: c.company,
-                      website: c.website || "",
-                      notes: c.notes || "",
-                      nickname: c.nickname || "",
-                      position: c.position || "",
-                      additionalPhones: JSON.stringify(c.additionalPhones || []),
-                      createdAt: c.createdAt || "",
-                      cardImage: c.cardImage || "",
-                      isFavorite: String(c.isFavorite),
-                    },
-              })
-            }
+            onCall={() => chooseAndCall(c)}
+            onDelete={() => confirmDelete(c._id)}
+            hasPhone={getAllNumbers(c).length > 0}
           >
-            <View style={cardStyle}>
-            <View className="flex-row items-center">
-              <View className="w-10 h-10 bg-blue-200 rounded-full justify-center items-center">
-                <Text className="text-white font-bold text-sm">
-                  {c.firstName?.[0]}
-                  {c.lastName?.[0]}
-                </Text>
-              </View>
-              <View className="ml-3">
-                <Text className="text-xl font-bold text-blue-900 font-nunito">
-                  {c.firstName} {c.lastName}
-                </Text>
-                <Text className="text-xs text-gray-500">{c.company}</Text>
-              </View>
-            </View>
+            <TouchableOpacity
+              onPress={() =>
+                router.push({
+                  pathname: "/contact-detail",
+                  params: {
+                    _id: c._id,
+                    firstName: c.firstName,
+                    lastName: c.lastName,
+                    phone: c.phone || "",
+                    email: c.email || "",
+                    company: c.company || "",
+                    website: c.website || "",
+                    notes: c.notes || "",
+                    nickname: c.nickname || "",
+                    position: c.position || "",
+                    additionalPhones: JSON.stringify(c.additionalPhones || []),
+                    createdAt: c.createdAt || "",
+                    cardImage: c.cardImage || "",
+                    isFavorite: String(c.isFavorite ?? false),
+                  },
+                })
+              }
+            >
+              <View
+                style={{
+                  backgroundColor: "white",
+                  borderRadius: 16,
+                  paddingVertical: 16,
+                  paddingHorizontal: 12,
+                  marginBottom: 16,
+                  borderWidth: 1,
+                  borderColor: CARD_BORDER,
+                  shadowColor: "#000",
+                  shadowOpacity: 0.08,
+                  shadowRadius: 6,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: 3,
+                  minHeight: 108,
+                }}
+              >
+                <View className="flex-row items-center">
+                  <View className="w-10 h-10 bg-blue-200 rounded-full justify-center items-center">
+                    <Text className="text-white font-bold text-sm">
+                      {(c.firstName?.[0] || "").toUpperCase()}
+                      {(c.lastName?.[0] || "").toUpperCase()}
+                    </Text>
+                  </View>
 
-            <View className="mt-3 space-y-1">
-              <View className="flex-row items-center">
-                <FontAwesome name="phone" size={14} color="#1996fc" />
-                <Text className="ml-2 text-sm text-gray-800">{c.phone}</Text>
-              </View>
-              <View className="flex-row items-center">
-                <MaterialIcons name="email" size={14} color="#1996fc" />
-                <Text className="ml-2 text-sm text-gray-800">{c.email}</Text>
-              </View>
-              <View className="flex-row items-center">
-                <FontAwesome name="briefcase" size={14} color="#1996fc" />
-                <Text className="ml-2 text-sm text-gray-800">{c.company}</Text>
-              </View>
-            </View>
-          </View>
+                  <View className="ml-3 flex-1">
+                    <Text className="text-xl font-bold text-blue-900 font-nunito">
+                      {c.firstName} {c.lastName}
+                    </Text>
+                    {!!c.nickname && <Text className="text-xs text-gray-500">{c.nickname}</Text>}
+                  </View>
 
-          </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => toggleFavorite(c)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={{
+                      backgroundColor: "#f4f6ff",
+                      borderWidth: 1,
+                      borderColor: "#e3e8ff",
+                      width: 32,
+                      height: 32,
+                      borderRadius: 16,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <FontAwesome
+                      name={c.isFavorite ? "star" : "star-o"}
+                      size={16}
+                      color={c.isFavorite ? STAR_YELLOW : "#c9d2f6"}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <View className="mt-3">
+                  <View className="flex-row items-center mb-1">
+                    <FontAwesome name="phone" size={14} color={ICON_BLUE} />
+                    <Text className="ml-2 text-sm text-gray-800">{safe(c.phone)}</Text>
+                  </View>
+                  <View className="flex-row items-center mb-1">
+                    <MaterialIcons name="email" size={14} color={ICON_BLUE} />
+                    <Text className="ml-2 text-sm text-gray-800">{safe(c.email)}</Text>
+                  </View>
+                  <View className="flex-row items-center">
+                    <FontAwesome name="briefcase" size={14} color={ICON_BLUE} />
+                    <Text className="ml-2 text-sm text-gray-800">{safe(c.company)}</Text>
+                  </View>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </AnimatedSwipeableRow>
         ))}
       </ScrollView>
 
-      {/* Bottom Sheet (simple modal) */}
-      <Modal
-        transparent
-        visible={sheetOpen}
-        animationType="fade"
-        onRequestClose={() => setSheetOpen(false)}
-      >
-        <Pressable
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.25)' }}
-          onPress={() => setSheetOpen(false)}
-        >
-          <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+      {/* Bottom Sheet */}
+      <Modal transparent visible={sheetOpen} animationType="fade" onRequestClose={() => setSheetOpen(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.25)" }} onPress={() => setSheetOpen(false)}>
+          <View style={{ flex: 1, justifyContent: "flex-end" }}>
             <View
               style={{
-                backgroundColor: '#fff',
+                backgroundColor: "#fff",
                 borderTopLeftRadius: 16,
                 borderTopRightRadius: 16,
                 paddingHorizontal: 16,
@@ -259,61 +355,51 @@ export default function HomeScreen() {
                 paddingBottom: 24,
               }}
             >
-              <View style={{ alignItems: 'center', paddingVertical: 8 }}>
-                <View
-                  style={{
-                    width: 40,
-                    height: 4,
-                    backgroundColor: '#e5e7eb',
-                    borderRadius: 999,
-                  }}
-                />
+              <View style={{ alignItems: "center", paddingVertical: 8 }}>
+                <View style={{ width: 40, height: 4, backgroundColor: "#e5e7eb", borderRadius: 999 }} />
               </View>
 
               <Pressable
                 onPress={openCamera}
                 style={{
                   borderWidth: 1,
-                  borderColor: '#eee',
-                  borderRadius: 10,
+                  borderColor: "#E7ECFF",
+                  backgroundColor: "#F6F7FB",
+                  borderRadius: 12,
                   paddingVertical: 14,
                   paddingHorizontal: 12,
                   marginBottom: 10,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                <FontAwesome name="camera" size={16} color="#111" />
-                <Text style={{ marginLeft: 8, fontSize: 15 }}>
-                  Scan with Camera
-                </Text>
+                <FontAwesome name="camera" size={16} color={BRAND_BLUE} />
+                <Text style={{ marginLeft: 8, fontSize: 15, color: BRAND_BLUE }}>Scan with Camera</Text>
               </Pressable>
 
               <Pressable
                 onPress={openGallery}
                 style={{
                   borderWidth: 1,
-                  borderColor: '#eee',
-                  borderRadius: 10,
+                  borderColor: "#E7ECFF",
+                  backgroundColor: "#F6F7FB",
+                  borderRadius: 12,
                   paddingVertical: 14,
                   paddingHorizontal: 12,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                <FontAwesome name="image" size={16} color="#111" />
-                <Text style={{ marginLeft: 8, fontSize: 15 }}>
-                  Import from Gallery
-                </Text>
+                <FontAwesome name="image" size={16} color={BRAND_BLUE} />
+                <Text style={{ marginLeft: 8, fontSize: 15, color: BRAND_BLUE }}>Import from Gallery</Text>
               </Pressable>
             </View>
           </View>
         </Pressable>
       </Modal>
 
-      {/* Bottom pill navigation */}
       <BottomNav />
     </SafeAreaView>
   );
@@ -322,23 +408,18 @@ export default function HomeScreen() {
 /* ---------- BottomNav ---------- */
 function BottomNav({ hidden }: { hidden?: boolean }) {
   if (hidden) return null;
-
   const pathname = usePathname();
   const router = useRouter();
 
-  const active: "home" | "contacts" | "calendar" | "profile" =
+  const active: "home" | "contacts" | "profile" =
     pathname.startsWith("/profile")
       ? "profile"
-      : pathname.startsWith("/calendar")
-      ? "calendar"
-      : pathname.startsWith("/contact")
-      ? "contacts"
-      : "home";
+        : pathname.startsWith("/contact")
+          ? "contacts"
+          : "home";
 
   const Item = ({
-    isActive,
-    onPress,
-    icon,
+    isActive, onPress, icon,
   }: {
     isActive?: boolean;
     onPress: () => void;
@@ -349,14 +430,8 @@ function BottomNav({ hidden }: { hidden?: boolean }) {
         onPress={onPress}
         activeOpacity={0.9}
         style={{
-          width: 54,
-          height: 54,
-          borderRadius: 27,
-          backgroundColor: "#FFFFFF",
-          alignItems: "center",
-          justifyContent: "center",
-          borderWidth: 2,
-          borderColor: "rgba(255,255,255,0.85)",
+          width: 54, height: 54, borderRadius: 27, backgroundColor: "#FFFFFF",
+          alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(255,255,255,0.85)",
         }}
       >
         <FontAwesome name={icon} size={20} color={BRAND_BLUE} />
@@ -364,29 +439,14 @@ function BottomNav({ hidden }: { hidden?: boolean }) {
     ) : (
       <TouchableOpacity
         onPress={onPress}
-        style={{
-          width: 54,
-          height: 54,
-          borderRadius: 27,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
+        style={{ width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center" }}
       >
         <FontAwesome name={icon} size={20} color="#FFFFFF" />
       </TouchableOpacity>
     );
 
   return (
-    <View
-      style={{
-        position: "absolute",
-        left: 20,
-        right: 20,
-        bottom: 24,
-        alignItems: "center",
-      }}
-      pointerEvents="box-none"
-    >
+    <View style={{ position: "absolute", left: 20, right: 20, bottom: 24, alignItems: "center" }} pointerEvents="box-none">
       <View
         style={{
           backgroundColor: BRAND_BLUE,
@@ -405,21 +465,8 @@ function BottomNav({ hidden }: { hidden?: boolean }) {
         }}
       >
         <Item icon="home" isActive={active === "home"} onPress={() => router.replace("/home")} />
-        <Item
-          icon="address-book-o"
-          isActive={active === "contacts"}
-          onPress={() => router.replace("/contact")}
-        />
-        <Item
-          icon="calendar-o"
-          isActive={active === "calendar"}
-          onPress={() => router.replace("/calendar")}
-        />
-        <Item
-          icon="user-o"
-          isActive={active === "profile"}
-          onPress={() => router.replace("/profile")}
-        />
+        <Item icon="address-book-o" isActive={active === "contacts"} onPress={() => router.replace("/contact")} />
+        <Item icon="user-o" isActive={active === "profile"} onPress={() => router.replace("/profile")} />
       </View>
     </View>
   );

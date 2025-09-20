@@ -1,9 +1,11 @@
+// app/crop.tsx
 import { FontAwesome } from "@expo/vector-icons";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,25 +14,30 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
-  GestureHandlerRootView,
   Gesture,
   GestureDetector,
+  GestureHandlerRootView,
 } from "react-native-gesture-handler";
 
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
 } from "react-native-reanimated";
 
-import * as FileSystem from "expo-file-system";
 import * as ImageManipulator from "expo-image-manipulator";
 
-const CLOUD_NAME = "dwmav1imw"; // ✅ your Cloudinary cloud name
-const UPLOAD_PRESET = "ml_default"; // ✅ your unsigned preset
+// ===== Theme =====
+const BRAND_BLUE = "#213BBB";
+const BG_LIGHT = "#EAF3FF";
+const BORDER = "rgba(33,59,187,0.12)";
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
-const frameWidth = screenWidth * 0.9;
-const frameHeight = frameWidth * 0.6;
+const CLOUD_NAME = "dwmav1imw"; // ✅ your Cloudinary name
+const UPLOAD_PRESET = "ml_default"; // ✅ your preset
+
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
+const PREVIEW_H = SCREEN_H * 0.68;
+const FRAME_W = SCREEN_W * 0.9;
+const FRAME_H = FRAME_W * 0.6;
 
 export default function CropScreen() {
   const { imageUri } = useLocalSearchParams();
@@ -39,25 +46,26 @@ export default function CropScreen() {
   const [processing, setProcessing] = useState(false);
 
   useLayoutEffect(() => {
+    // @ts-ignore
     navigation.setOptions({ headerShown: false });
   }, []);
 
-  // Shared values
+  // ===== Gestures =====
   const scale = useSharedValue(1);
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
 
-  // Define gestures
-  const pinch = Gesture.Pinch().onUpdate((event) => {
-    scale.value = event.scale;
+  const pinch = Gesture.Pinch().onUpdate((e) => {
+    scale.value = e.scale;
   });
 
-  const pan = Gesture.Pan().onUpdate((event) => {
-    translateX.value = event.translationX;
-    translateY.value = event.translationY;
+  const pan = Gesture.Pan().onUpdate((e) => {
+    translateX.value = e.translationX;
+    translateY.value = e.translationY;
   });
 
-  // Animated style
+  const combinedGesture = Gesture.Simultaneous(pinch, pan);
+
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
       { scale: scale.value },
@@ -66,79 +74,66 @@ export default function CropScreen() {
     ],
   }));
 
-  // 📤 Upload helper
-  // 📤 Upload helper (fixed for SDK 54+)
-const uploadToCloudinary = async (uri: string) => {
-  const data = new FormData();
-  data.append("file", {
-    uri,
-    type: "image/jpeg",
-    name: "upload.jpg",
-  } as any);
-  data.append("upload_preset", UPLOAD_PRESET);
+  // ===== Upload helper (safe for Expo SDK 54+) =====
+  const uploadToCloudinary = async (uri: string) => {
+    const data = new FormData();
+    data.append("file", {
+      uri,
+      type: "image/jpeg",
+      name: "upload.jpg",
+    } as any);
+    data.append("upload_preset", UPLOAD_PRESET);
 
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-    {
-      method: "POST",
-      body: data,
-    }
-  );
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+      { method: "POST", body: data }
+    );
 
-  const json = await res.json();
-  if (json.secure_url) {
-    return json.secure_url;
-  } else {
+    const json = await res.json();
+    if (json.secure_url) return json.secure_url;
     throw new Error("Cloudinary upload failed: " + JSON.stringify(json));
-  }
-};
+  };
 
-
-  // Confirm crop
+  // ===== Confirm crop =====
   const handleConfirm = async () => {
     if (!imageUri) return;
     try {
       setProcessing(true);
 
-      // 1. Load original image info
-      const imgInfo = await ImageManipulator.manipulateAsync(imageUri as string, []);
-      const imgWidth = imgInfo.width;
-      const imgHeight = imgInfo.height;
+      // 1. Get original image info
+      const info = await ImageManipulator.manipulateAsync(imageUri as string, []);
+      const imgW = info.width;
+      const imgH = info.height;
 
-      // 2. Calculate crop region in image coordinates
-      const frameX = (screenWidth - frameWidth) / 2;
-      const frameY = screenHeight / 2 - frameHeight / 2;
+      // 2. Frame on screen
+      const frameX = (SCREEN_W - FRAME_W) / 2;
+      const frameY = (PREVIEW_H - FRAME_H) / 2;
 
-      const scaleX = imgWidth / screenWidth;
-      const scaleY = imgHeight / screenHeight;
+      // 3. Convert frame → image pixels
+      const scaleX = imgW / SCREEN_W;
+      const scaleY = imgH / PREVIEW_H;
 
       const cropRegion = {
         originX: Math.max(0, frameX * scaleX - translateX.value * scaleX),
         originY: Math.max(0, frameY * scaleY - translateY.value * scaleY),
-        width: Math.min(imgWidth, (frameWidth * scaleX) / scale.value),
-        height: Math.min(imgHeight, (frameHeight * scaleY) / scale.value),
+        width: Math.min(imgW, (FRAME_W * scaleX) / scale.value),
+        height: Math.min(imgH, (FRAME_H * scaleY) / scale.value),
       };
 
-      console.log("📐 Final crop region:", cropRegion);
+      console.log("📐 Crop region:", cropRegion);
 
-      // 3. Crop with expo-image-manipulator
+      // 4. Crop
       const cropped = await ImageManipulator.manipulateAsync(
         imageUri as string,
         [{ crop: cropRegion }],
         { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
       );
 
-      console.log("✅ Cropped URI:", cropped.uri);
-
-      // 4. Upload to Cloudinary
+      // 5. Upload
       const cloudUrl = await uploadToCloudinary(cropped.uri);
-      console.log("✅ Cloudinary URL:", cloudUrl);
 
-      // 5. Navigate to add-contact
-      router.replace({
-        pathname: "/add-contact",
-        params: { imageUri: cloudUrl },
-      });
+      // 6. Go to add-contact
+      router.replace({ pathname: "/add-contact", params: { imageUri: cloudUrl } });
     } catch (err) {
       console.error("❌ Crop/upload failed:", err);
     } finally {
@@ -149,47 +144,57 @@ const uploadToCloudinary = async (uri: string) => {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={styles.container}>
-        {/* 🔙 Back button */}
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <FontAwesome name="arrow-left" size={20} color="white" />
-        </TouchableOpacity>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
+            <FontAwesome name="arrow-left" size={18} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Crop Business Card</Text>
+          <View style={{ width: 36, height: 36, opacity: 0 }} />
+        </View>
+        <View style={styles.headerUnderlay} />
 
-        {/* Image preview with gestures */}
-        <View style={styles.imageContainer}>
+        {/* Workspace */}
+        <View style={styles.canvasWrap}>
           {imageUri ? (
-            <GestureDetector gesture={Gesture.Simultaneous(pinch, pan)}>
-              <Animated.Image
-                source={{ uri: imageUri as string }}
-                style={[styles.preview, animatedStyle]}
-              />
-            </GestureDetector>
+            <View style={styles.previewWrapper}>
+              <GestureDetector gesture={combinedGesture}>
+                <Animated.View style={[StyleSheet.absoluteFillObject, animatedStyle]}>
+                  <Image source={{ uri: imageUri as string }} style={styles.previewImage} />
+                </Animated.View>
+              </GestureDetector>
+              <View pointerEvents="none" style={styles.frameCenter}>
+                <View style={styles.cardFrame} />
+              </View>
+            </View>
           ) : (
-            <Text style={{ color: "white" }}>⚠️ No image loaded</Text>
+            <Text>No image loaded</Text>
           )}
-
-          {/* White crop frame */}
-          <View style={styles.cardFrame} pointerEvents="none" />
         </View>
 
-        {/* Bottom buttons */}
-        <View style={styles.buttonRow}>
+        {/* Bottom actions */}
+        <View style={styles.bottomBar}>
           <TouchableOpacity
-            style={[styles.circleBtn, processing && { opacity: 0.5 }]}
+            style={[styles.secondaryBtn, processing && { opacity: 0.6 }]}
             onPress={() => router.back()}
             disabled={processing}
           >
-            <FontAwesome name="close" size={22} color="white" />
+            <FontAwesome name="close" size={16} color={BRAND_BLUE} />
+            <Text style={styles.secondaryText}>Cancel</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.captureBtn, processing && { opacity: 0.5 }]}
+            style={[styles.primaryBtn, processing && { opacity: 0.7 }]}
             onPress={handleConfirm}
             disabled={processing}
           >
             {processing ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color="#fff" />
             ) : (
-              <FontAwesome name="check" size={28} color="white" />
+              <>
+                <FontAwesome name="check" size={18} color="#fff" />
+                <Text style={styles.primaryText}>Use Photo</Text>
+              </>
             )}
           </TouchableOpacity>
         </View>
@@ -198,45 +203,93 @@ const uploadToCloudinary = async (uri: string) => {
   );
 }
 
+/* ---------- Styles ---------- */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "black" },
-  imageContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  preview: {
-    width: screenWidth,
-    height: screenHeight * 0.7,
-    resizeMode: "contain",
+  container: { flex: 1, backgroundColor: "#FFFFFF" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: BRAND_BLUE,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  headerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+  },
+  headerTitle: {
+    flex: 1,
+    textAlign: "center",
+    color: "#fff",
+    fontSize: 16,
+    fontFamily: "Nunito",
+  },
+  headerUnderlay: {
+    height: 18,
+    backgroundColor: BG_LIGHT,
+    marginTop: -8,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+  },
+  canvasWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
+  previewWrapper: {
+    width: SCREEN_W,
+    height: PREVIEW_H,
+    alignSelf: "center",
+    position: "relative",
+    overflow: "hidden",
+  },
+  previewImage: { width: "100%", height: "100%", resizeMode: "contain" },
+  frameCenter: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
   },
   cardFrame: {
-    position: "absolute",
-    width: frameWidth,
-    height: frameHeight,
-    borderColor: "white",
+    width: FRAME_W,
+    height: FRAME_H,
+    borderRadius: 16,
     borderWidth: 2,
-    borderRadius: 12,
+    borderColor: BRAND_BLUE,
+    backgroundColor: "transparent",
   },
-  buttonRow: {
+  bottomBar: {
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 24,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    backgroundColor: "#FFF",
   },
-  circleBtn: {
-    backgroundColor: "#182C6B",
-    padding: 14,
-    borderRadius: 40,
+  secondaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: BORDER,
   },
-  captureBtn: {
-    backgroundColor: "#182C6B",
-    padding: 20,
-    borderRadius: 50,
+  secondaryText: { color: BRAND_BLUE, fontFamily: "Nunito", fontSize: 14 },
+  primaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    backgroundColor: BRAND_BLUE,
   },
-  backBtn: {
-    position: "absolute",
-    top: 40,
-    left: 20,
-    zIndex: 10,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 20,
-    padding: 8,
-  },
+  primaryText: { color: "#FFFFFF", fontFamily: "Nunito", fontSize: 14 },
 });

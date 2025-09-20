@@ -1,67 +1,89 @@
+// app/contact-detail.tsx
+//pull shark
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
 import * as Contacts from "expo-contacts";
-import {
-  useLocalSearchParams,
-  useNavigation,
-  useRouter,
-} from "expo-router";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { JSX } from "react/jsx-runtime";
 
+const BRAND_BLUE = "#213BBB";
+const GRAY_TEXT = "#374151";
+const GRAY_LABEL = "#6B7280";
+const LIGHT_BG = "#F9FAFB";
+
 // wrap Image for animation
 const AnimatedImage = Animated.createAnimatedComponent(Image);
+
+// --- Robust param normalizer (string | string[] | undefined -> string) ---
+const norm = (v: unknown): string => {
+  if (Array.isArray(v)) return String(v[0] ?? "");
+  return v == null ? "" : String(v);
+};
 
 export default function ContactDetail() {
   const navigation = useNavigation();
   const router = useRouter();
 
   useLayoutEffect(() => {
-    navigation.setOptions({ headerShown: false });
-  }, []);
+    // @ts-ignore: expo-router typing can be loose by version
+    navigation.setOptions?.({ headerShown: false });
+  }, [navigation]);
 
-  const {
-    firstName,
-    lastName,
-    phone,
-    email,
-    company,
-    website,
-    notes,
-    createdAt,
-    nickname,
-    position,
-    additionalPhones,
-    _id,
-    cardImage, // ✅ Cloudinary image url
-  } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const firstName = norm(params.firstName);
+  const lastName = norm(params.lastName);
+  const phone = norm(params.phone);
+  const email = norm(params.email);
+  const company = norm(params.company);
+  const website = norm(params.website);
+  const notes = norm(params.notes);
+  const createdAt = norm(params.createdAt);
+  const nickname = norm(params.nickname);
+  const position = norm(params.position);
+  const _id = norm(params._id);
+  const cardImage = norm(params.cardImage);
+  const additionalPhonesRaw = params.additionalPhones;
 
   const initials = `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
 
-  // normalize additionalPhones into array
+  // ✅ normalize additionalPhones into a clean string[]
   const parsedAdditionalPhones: string[] = useMemo(() => {
-    if (Array.isArray(additionalPhones)) return additionalPhones as string[];
-    if (typeof additionalPhones === "string" && additionalPhones.trim().length) {
-      return additionalPhones
-        .split(",")
-        .map((s) => s.trim().replace(/^['"]+|['"]+$/g, ""))
-        .filter(Boolean);
+    // Already array?
+    if (Array.isArray(additionalPhonesRaw)) {
+      return additionalPhonesRaw.map((s) => String(s)).filter(Boolean);
     }
-    return [];
-  }, [additionalPhones]);
+    const raw = norm(additionalPhonesRaw).trim();
+    if (!raw) return [];
 
-  // flip animation state
+    // Try to parse JSON first (handles '["xxx","yyy"]' or '"xxx"')
+    try {
+      const js = JSON.parse(raw);
+      if (Array.isArray(js)) return js.map((x) => String(x)).filter(Boolean);
+      if (typeof js === "string") return [js];
+    } catch {
+      // ignore
+    }
+
+    // Fallback: split by comma
+    return raw
+      .split(",")
+      .map((s) => s.trim().replace(/^['"]+|['"]+$/g, ""))
+      .filter(Boolean);
+  }, [additionalPhonesRaw]);
+
+  // Flip card animation
   const flipAnim = useRef(new Animated.Value(0)).current;
   const [flipped, setFlipped] = useState(false);
 
@@ -77,16 +99,15 @@ export default function ContactDetail() {
     inputRange: [0, 1],
     outputRange: ["0deg", "180deg"],
   });
-
   const backInterpolate = flipAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ["180deg", "360deg"],
   });
 
-  // measure front height
+  // Maintain matching front/back height
   const [frontHeight, setFrontHeight] = useState(200);
 
-  // InfoRow component
+  // Reusable row
   const InfoRow = ({
     label,
     value,
@@ -97,14 +118,12 @@ export default function ContactDetail() {
     icon: JSX.Element;
   }) => (
     <View
-      className="flex-row justify-between items-center py-4"
-      style={{ borderBottomWidth: 1, borderBottomColor: "#203d8b2f" }}
+      className="flex-row justify-between items-center py-3"
+      style={{ borderBottomWidth: 1, borderBottomColor: "#E5E7EB" }}
     >
       <View className="flex-1 pr-4">
-        <Text className="text-xs text-gray-500 mb-1">{label}</Text>
-        <Text className="text-base text-gray-800 font-nunito">
-          {value || "None"}
-        </Text>
+        <Text style={{ fontSize: 12, color: GRAY_LABEL, marginBottom: 2 }}>{label}</Text>
+        <Text style={{ fontSize: 15, color: GRAY_TEXT }}>{value || "None"}</Text>
       </View>
       {icon}
     </View>
@@ -117,21 +136,21 @@ export default function ContactDetail() {
       return;
     }
 
-    const contact = {
+    const deviceContact = {
       contactType: Contacts.ContactTypes.Person,
-      firstName: String(firstName || ""),
-      lastName: String(lastName || ""),
-      company: String(company || ""),
-      emails: email ? [{ label: "work", email: String(email) }] : [],
+      firstName,
+      lastName,
+      company,
+      emails: email ? [{ label: "work", email }] : [],
       phoneNumbers: [
-        ...(phone ? [{ label: "mobile", number: String(phone) }] : []),
+        ...(phone ? [{ label: "mobile", number: phone }] : []),
         ...parsedAdditionalPhones.map((p) => ({ label: "other", number: p })),
       ],
-      note: String(notes || ""),
+      note: notes,
     };
 
     try {
-      await Contacts.addContactAsync(contact as Contacts.Contact);
+      await Contacts.addContactAsync(deviceContact as Contacts.Contact);
       Alert.alert("Saved", "Contact saved to your phone.");
     } catch (err) {
       console.error(err);
@@ -142,20 +161,18 @@ export default function ContactDetail() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       {/* Top bar */}
-      <View className="bg-blue-900 px-6 py-6 flex-row items-center">
+      <View className="px-6 py-5 flex-row items-center" style={{ backgroundColor: BRAND_BLUE }}>
         <TouchableOpacity onPress={() => router.back()}>
           <FontAwesome name="arrow-left" size={20} color="white" />
         </TouchableOpacity>
-        <Text className="text-white text-xl font-nunito ml-4">
-          Contact Detail
-        </Text>
+        <Text className="text-white text-xl ml-4">Contact Detail</Text>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
         {/* Flip card */}
         <Pressable onPress={flipCard} className="mt-6 mx-4">
           <View style={{ alignItems: "center", height: frontHeight }}>
-            {/* front */}
+            {/* Front */}
             <Animated.View
               style={[
                 styles.card,
@@ -168,28 +185,28 @@ export default function ContactDetail() {
               ]}
               onLayout={(e) => setFrontHeight(e.nativeEvent.layout.height)}
             >
-              <View className="bg-white w-20 h-20 rounded-full items-center justify-center shadow">
-                <Text className="text-xl font-bold text-blue-900">{initials}</Text>
+              <View className="w-20 h-20 rounded-full items-center justify-center shadow" style={{ backgroundColor: "#E5E7EB" }}>
+                <Text className="text-xl font-bold" style={{ color: BRAND_BLUE }}>
+                  {initials}
+                </Text>
               </View>
-              <Text className="mt-4 text-xl font-bold text-blue-900 font-nunito">
+              <Text className="mt-4 text-xl font-bold" style={{ color: BRAND_BLUE }}>
                 {firstName} {lastName}
               </Text>
-              {nickname && (
-                <Text className="text-sm text-blue-800 font-nunito italic">
+              {!!nickname && (
+                <Text className="text-sm italic" style={{ color: GRAY_LABEL }}>
                   ({nickname})
                 </Text>
               )}
-              {position && (
-                <Text className="text-sm text-gray-700 font-nunito">
+              {!!position && (
+                <Text className="text-sm" style={{ color: GRAY_TEXT }}>
                   {position}
                 </Text>
               )}
-              {phone && (
-                <Text className="text-gray-700 font-nunito text-base">{phone}</Text>
-              )}
+              {!!phone && <Text style={{ color: GRAY_TEXT }}>{phone}</Text>}
             </Animated.View>
 
-            {/* back */}
+            {/* Back */}
             <Animated.View
               style={[
                 styles.card,
@@ -198,44 +215,32 @@ export default function ContactDetail() {
                   backfaceVisibility: "hidden",
                   position: "absolute",
                   width: "100%",
-                  height: frontHeight, // match front
+                  height: frontHeight,
                 },
               ]}
             >
               <View className="flex-1 items-center justify-center">
                 {cardImage ? (
                   <View>
-                    <Text className="text-blue-900 font-nunito mb-2">
-                      Scanned Card
-                    </Text>
+                    <Text style={{ color: BRAND_BLUE, marginBottom: 8 }}>Scanned Card</Text>
                     <AnimatedImage
-                      source={{ uri: cardImage as string }}
-                      style={{
-                        width: 260,
-                        height: 160,
-                        borderRadius: 12,
-                        resizeMode: "contain",
-                      }}
+                      source={{ uri: cardImage }}
+                      style={{ width: 260, height: 160, borderRadius: 12, resizeMode: "contain" }}
                     />
                   </View>
                 ) : (
-                  <Text className="text-blue-900 font-nunito">Back Side</Text>
+                  <Text style={{ color: BRAND_BLUE }}>Back Side</Text>
                 )}
               </View>
             </Animated.View>
           </View>
         </Pressable>
 
-        {/* Buttons */}
+        {/* Actions */}
         <View className="flex-row justify-around mt-6 px-6">
-          <TouchableOpacity
-            className="items-center"
-            onPress={handleSaveToDevice}
-          >
-            <FontAwesome name="phone" size={20} color="#203c8b" />
-            <Text className="text-[#203c8b] mt-1 font-nunito">
-              Save to Phone
-            </Text>
+          <TouchableOpacity className="items-center" onPress={handleSaveToDevice}>
+            <FontAwesome name="save" size={20} color={BRAND_BLUE} />
+            <Text style={{ color: BRAND_BLUE, marginTop: 4 }}>Save to Phone</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -253,97 +258,71 @@ export default function ContactDetail() {
                   notes,
                   nickname,
                   position,
-                  additionalPhones: parsedAdditionalPhones.join(","),
-                  _id: String(_id),
-                  cardImage: String(cardImage || ""),
+                  additionalPhones: parsedAdditionalPhones.join(","), // pass as CSV
+                  _id,
+                  cardImage: cardImage || "",
                 },
               })
             }
           >
-            <MaterialIcons name="edit" size={20} color="#203c8b" />
-            <Text className="text-[#203c8b] mt-1 font-nunito">Edit</Text>
+            <MaterialIcons name="edit" size={20} color={BRAND_BLUE} />
+            <Text style={{ color: BRAND_BLUE, marginTop: 4 }}>Edit</Text>
           </TouchableOpacity>
         </View>
 
         {/* Info Section */}
-        <View className="bg-blue-100 mt-6 mx-4 p-4 rounded-xl shadow">
-          <Text className="text-xs text-center text-blue-900 mb-4">
-            Card saved at:{" "}
-            {createdAt
-              ? new Date(createdAt as string).toLocaleString()
-              : "N/A"}
+        <View className="mt-6 mx-4 p-4 rounded-xl shadow bg-white border border-gray-200">
+          <Text style={{ fontSize: 12, textAlign: "center", color: GRAY_LABEL, marginBottom: 12 }}>
+            Card saved at: {createdAt ? new Date(createdAt).toLocaleString() : "N/A"}
           </Text>
 
           <InfoRow
             label="Email"
-            value={email as string}
-            icon={<MaterialIcons name="email" size={20} color="#203c8b" />}
+            value={email}
+            icon={<MaterialIcons name="email" size={20} color={BRAND_BLUE} />}
           />
           <InfoRow
             label="Company"
-            value={company as string}
-            icon={<FontAwesome name="building" size={20} color="#203c8b" />}
+            value={company}
+            icon={<FontAwesome name="building" size={20} color={BRAND_BLUE} />}
           />
           <InfoRow
             label="Website"
-            value={website as string}
-            icon={<FontAwesome name="globe" size={20} color="#203c8b" />}
+            value={website}
+            icon={<FontAwesome name="globe" size={20} color={BRAND_BLUE} />}
           />
           <InfoRow
             label="Notes"
-            value={notes as string}
-            icon={<MaterialIcons name="sticky-note-2" size={20} color="#203c8b" />}
+            value={notes}
+            icon={<MaterialIcons name="sticky-note-2" size={20} color={BRAND_BLUE} />}
           />
 
-          {/* ✅ Additional Phones Section */}
-{parsedAdditionalPhones.length > 0 ? (
-  <View
-    style={{
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 12,
-    }}
-  >
-    {/* Left side → label + list of numbers */}
-    <View>
-      <Text style={{ fontSize: 14, color: "#666" }}>Additional Phones</Text>
-      {parsedAdditionalPhones.map((rawPhone, index) => {
-        let phone = rawPhone;
-
-        try {
-          while (
-            typeof phone === "string" &&
-            (phone.trim().startsWith("[") || phone.trim().startsWith('"'))
-          ) {
-            const parsed = JSON.parse(phone);
-            if (Array.isArray(parsed)) {
-              phone = parsed[0];
-            } else {
-              phone = parsed;
-            }
-          }
-        } catch {
-          // fallback: leave as-is
-        }
-
-        return (
-          <Text
-            key={index}
-            style={{ fontSize: 16, color: "#333", marginTop: 2 }}
-          >
-            {String(phone).replace(/["\[\]\\]/g, "")}
-          </Text>
-        );
-      })}
-    </View>
-
-    {/* Right side → one phone icon */}
-    <FontAwesome name="phone" size={20} color="#1E3A8A" />
-  </View>
-) : (
-  <Text style={{ fontSize: 16, color: "#999" }}>No additional phones</Text>
-)}
+          {/* Additional Phones */}
+          {parsedAdditionalPhones.length > 0 ? (
+            <View style={{ marginTop: 12 }}>
+              <Text style={{ fontSize: 12, color: GRAY_LABEL, marginBottom: 6 }}>
+                Additional Phones
+              </Text>
+              {parsedAdditionalPhones.map((p, idx) => (
+                <View
+                  key={`${p}-${idx}`}
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingVertical: 4,
+                    borderBottomWidth: idx < parsedAdditionalPhones.length - 1 ? 1 : 0,
+                    borderBottomColor: "#E5E7EB",
+                  }}
+                >
+                  <Text style={{ fontSize: 15, color: GRAY_TEXT }}>{p}</Text>
+                  <FontAwesome name="phone" size={16} color={BRAND_BLUE} />
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={{ fontSize: 14, color: GRAY_LABEL }}>No additional phones</Text>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -352,14 +331,14 @@ export default function ContactDetail() {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#BFDBFE", // blue-100
+    backgroundColor: LIGHT_BG,
     borderRadius: 16,
     padding: 24,
     alignItems: "center",
     justifyContent: "center",
     width: "100%",
-    shadowColor: "#ffffffff",
-    shadowOpacity: 0.1,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 3,
     minHeight: 180,
