@@ -15,8 +15,13 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import { scheduleOnRN } from "react-native-worklets";
+import { runOnJS, scheduleOnRN } from "react-native-worklets";
 import { FontAwesome } from "@expo/vector-icons";
+
+/* ---------- Global typing fix ---------- */
+declare global {
+  var __dropZones: { [key: string]: LayoutRectangle } | undefined;
+}
 
 type Contact = {
   firstName: string;
@@ -31,13 +36,14 @@ type Contact = {
   notes: string;
 };
 
-// ✅ Draggable token
 function DraggableToken({
   text,
   onDrop,
+  onHover,
 }: {
   text: string;
   onDrop: (x: number, y: number, txt: string) => void;
+  onHover: (field: string | null) => void;
 }) {
   const x = useSharedValue(0);
   const y = useSharedValue(0);
@@ -48,21 +54,37 @@ function DraggableToken({
       isDragging.value = true;
     })
     .onUpdate((e) => {
-      x.value = e.translationX;
-      y.value = e.translationY;
-    })
-    .onEnd((e) => {
-      isDragging.value = false;
-      scheduleOnRN(onDrop, e.absoluteX, e.absoluteY, text);
-      x.value = withSpring(0);
-      y.value = withSpring(0);
-    });
+  x.value = e.translationX;
+  y.value = e.translationY;
+
+  // live highlight detection
+  for (const [field, rect] of Object.entries(globalThis.__dropZones ?? {})) {
+    if (
+      e.absoluteX >= rect.x &&
+      e.absoluteX <= rect.x + rect.width &&
+      e.absoluteY >= rect.y &&
+      e.absoluteY <= rect.y + rect.height
+    ) {
+      scheduleOnRN(onHover, field); // ✅ no runOnJS
+      return;
+    }
+  }
+  scheduleOnRN(onHover, null); // ✅
+})
+.onEnd((e) => {
+  isDragging.value = false;
+  scheduleOnRN(onDrop, e.absoluteX, e.absoluteY, text);
+  x.value = withSpring(0);
+  y.value = withSpring(0);
+  scheduleOnRN(onHover, null); // ✅
+});
+
 
   const style = useAnimatedStyle(() => ({
     transform: [{ translateX: x.value }, { translateY: y.value }],
     zIndex: isDragging.value ? 9999 : 1,
     elevation: isDragging.value ? 5 : 0,
-    position: isDragging.value ? "absolute" : "relative", // ✅ can leave token box
+    position: isDragging.value ? "absolute" : "relative",
   }));
 
   return (
@@ -74,58 +96,17 @@ function DraggableToken({
   );
 }
 
-// ✅ OCR preprocessing with merging
+// Simple cleanup
 function preprocessOCR(rawText: string): string[] {
-  // Split by line breaks and spaces
-  let parts = rawText.split(/\s+/).map((t) => t.trim());
-
-  // Remove noise words
-  parts = parts.filter(
-    (t) =>
-      t &&
-      !/^(Mobile|Office|Tel|E-?mail|Ext\.?|ns\.?|EL)$/i.test(t) &&
-      t.length > 1
-  );
-
-  // Merge sequences into meaningful tokens
-  const tokens: string[] = [];
-  let buffer = "";
-
-  const flushBuffer = () => {
-    if (buffer) {
-      tokens.push(buffer.trim());
-      buffer = "";
-    }
-  };
-
-  for (let t of parts) {
-    // Detect email
-    if (/\S+@\S+\.\S+/.test(t)) {
-      flushBuffer();
-      tokens.push(t);
-      continue;
-    }
-
-    // Detect website/URL
-    if (/^https?:\/\//i.test(t) || /\.(com|org|net|edu|au\.edu)$/i.test(t)) {
-      flushBuffer();
-      tokens.push(t);
-      continue;
-    }
-
-    // Detect phone (digits, +, -, (, ))
-    if (/^[\d()+-]+$/.test(t)) {
-      buffer += t;
-      continue;
-    }
-
-    // Default case → flush buffer if needed, then push word
-    flushBuffer();
-    tokens.push(t);
-  }
-
-  flushBuffer();
-  return tokens;
+  return rawText
+    .split(/\n|,|;/)
+    .map((t) => t.trim())
+    .filter(
+      (t) =>
+        t &&
+        !/^(Mobile|Office|Tel|E-?mail|Ext\.?|ns\.?|EL)$/i.test(t) &&
+        t.length > 1
+    );
 }
 
 export default function ManualFill() {
@@ -149,9 +130,11 @@ export default function ManualFill() {
         }
   );
 
-  const [showAll, setShowAll] = useState(false);
-
+  // store absolute rects
   const dropZones = useRef<{ [key: string]: LayoutRectangle }>({}).current;
+  globalThis.__dropZones = dropZones;
+
+  const [highlightField, setHighlightField] = useState<string | null>(null);
 
   const handleDrop = (x: number, y: number, txt: string) => {
     for (const [field, rect] of Object.entries(dropZones)) {
@@ -169,15 +152,15 @@ export default function ManualFill() {
         } else {
           setContact((prev) => ({ ...prev, [field]: txt }));
         }
+        break;
       }
     }
+    setHighlightField(null);
   };
 
   const allTokens: string[] = ocrData
     ? preprocessOCR(JSON.parse(ocrData as string).rawText)
     : [];
-
-  const visibleTokens = showAll ? allTokens : allTokens.slice(0, 30);
 
   const renderInput = (
     label: string,
@@ -188,13 +171,27 @@ export default function ManualFill() {
   ) => (
     <View style={{ marginBottom: 12 }}>
       <Text style={styles.label}>{label}</Text>
-      <View style={styles.inputRow}>
+      <View
+        ref={(ref) => {
+          if (ref) {
+            ref.measureInWindow((x, y, width, height) => {
+              dropZones[zoneKey] = { x, y, width, height };
+            });
+          }
+        }}
+        style={[
+          styles.inputRow,
+          highlightField === zoneKey && {
+            borderColor: "#1996fc",
+            borderWidth: 2,
+          },
+        ]}
+      >
         <TextInput
           style={[styles.input, multiline && { height: 80 }]}
           value={value}
           onChangeText={onChange}
           multiline={multiline}
-          onLayout={(e) => (dropZones[zoneKey] = e.nativeEvent.layout)}
         />
         {value ? (
           <TouchableOpacity onPress={() => onChange("")} style={styles.clearBtn}>
@@ -212,29 +209,25 @@ export default function ManualFill() {
           Drag OCR Tokens
         </Text>
 
-        {/* ✅ Tokens with vertical scroll + see more */}
+        {/* ✅ Vertical scrollable token box */}
         <View style={styles.ocrContainer}>
           <ScrollView
             style={{ maxHeight: 160 }}
             nestedScrollEnabled
-            showsVerticalScrollIndicator
+            showsVerticalScrollIndicator={true}
+            contentContainerStyle={{ flexWrap: "wrap", flexDirection: "row" }}
           >
-            <View style={styles.tokenWrapper}>
-              {visibleTokens.map((t, i) => (
-                <DraggableToken key={`token-${i}`} text={t} onDrop={handleDrop} />
-              ))}
-            </View>
+            {allTokens.map((t, i) => (
+              <DraggableToken
+                key={`token-${i}`}
+                text={t}
+                onDrop={handleDrop}
+                onHover={setHighlightField}
+              />
+            ))}
           </ScrollView>
-          {allTokens.length > 30 && (
-            <TouchableOpacity onPress={() => setShowAll((v) => !v)}>
-              <Text style={{ color: "#213BBB", marginTop: 6 }}>
-                {showAll ? "See less" : "See more"}
-              </Text>
-            </TouchableOpacity>
-          )}
         </View>
 
-        {/* Input Fields */}
         {renderInput("First Name", contact.firstName, (val) =>
           setContact({ ...contact, firstName: val }), "firstName")}
         {renderInput("Last Name", contact.lastName, (val) =>
@@ -249,7 +242,27 @@ export default function ManualFill() {
         {contact.additionalPhones.map((num, idx) => (
           <View key={`addPhone-${idx}`} style={{ marginBottom: 12 }}>
             <Text style={styles.label}>Additional Phone {idx + 1}</Text>
-            <View style={styles.inputRow}>
+            <View
+              ref={(ref) => {
+                if (ref) {
+                  ref.measureInWindow((x, y, width, height) => {
+                    dropZones[`additionalPhones_${idx}`] = {
+                      x,
+                      y,
+                      width,
+                      height,
+                    };
+                  });
+                }
+              }}
+              style={[
+                styles.inputRow,
+                highlightField === `additionalPhones_${idx}` && {
+                  borderColor: "#1996fc",
+                  borderWidth: 2,
+                },
+              ]}
+            >
               <TextInput
                 style={styles.input}
                 value={num}
@@ -258,9 +271,6 @@ export default function ManualFill() {
                   updated[idx] = val;
                   setContact({ ...contact, additionalPhones: updated });
                 }}
-                onLayout={(e) =>
-                  (dropZones[`additionalPhones_${idx}`] = e.nativeEvent.layout)
-                }
               />
               {num ? (
                 <TouchableOpacity
@@ -323,10 +333,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     margin: 4,
-  },
-  tokenWrapper: {
-    flexDirection: "row",
-    flexWrap: "wrap",
   },
   ocrContainer: {
     backgroundColor: "#f9f9f9",
