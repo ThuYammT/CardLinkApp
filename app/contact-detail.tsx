@@ -1,5 +1,4 @@
-// app/contact-detail.tsx
-//pull shark
+// app/contact-detail.tsx 
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
 import * as Contacts from "expo-contacts";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -7,7 +6,9 @@ import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
+  Easing,
   Image,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,7 +27,7 @@ const LIGHT_BG = "#F9FAFB";
 // wrap Image for animation
 const AnimatedImage = Animated.createAnimatedComponent(Image);
 
-// --- Robust param normalizer (string | string[] | undefined -> string) ---
+// --- Robust param normalizer ---
 const norm = (v: unknown): string => {
   if (Array.isArray(v)) return String(v[0] ?? "");
   return v == null ? "" : String(v);
@@ -37,7 +38,7 @@ export default function ContactDetail() {
   const router = useRouter();
 
   useLayoutEffect(() => {
-    // @ts-ignore: expo-router typing can be loose by version
+    // @ts-ignore
     navigation.setOptions?.({ headerShown: false });
   }, [navigation]);
 
@@ -58,25 +59,20 @@ export default function ContactDetail() {
 
   const initials = `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
 
-  // ✅ normalize additionalPhones into a clean string[]
+  // normalize additionalPhones
   const parsedAdditionalPhones: string[] = useMemo(() => {
-    // Already array?
     if (Array.isArray(additionalPhonesRaw)) {
       return additionalPhonesRaw.map((s) => String(s)).filter(Boolean);
     }
     const raw = norm(additionalPhonesRaw).trim();
     if (!raw) return [];
 
-    // Try to parse JSON first (handles '["xxx","yyy"]' or '"xxx"')
     try {
       const js = JSON.parse(raw);
       if (Array.isArray(js)) return js.map((x) => String(x)).filter(Boolean);
       if (typeof js === "string") return [js];
-    } catch {
-      // ignore
-    }
+    } catch {}
 
-    // Fallback: split by comma
     return raw
       .split(",")
       .map((s) => s.trim().replace(/^['"]+|['"]+$/g, ""))
@@ -88,12 +84,13 @@ export default function ContactDetail() {
   const [flipped, setFlipped] = useState(false);
 
   const flipCard = () => {
-    Animated.timing(flipAnim, {
-      toValue: flipped ? 0 : 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start(() => setFlipped(!flipped));
-  };
+  Animated.timing(flipAnim, {
+    toValue: flipped ? 0 : 1,
+    duration: 600,
+    easing: Easing.inOut(Easing.ease),
+    useNativeDriver: true,
+  }).start(() => setFlipped(!flipped));
+};
 
   const frontInterpolate = flipAnim.interpolate({
     inputRange: [0, 1],
@@ -104,10 +101,9 @@ export default function ContactDetail() {
     outputRange: ["180deg", "360deg"],
   });
 
-  // Maintain matching front/back height
   const [frontHeight, setFrontHeight] = useState(200);
 
-  // Reusable row
+  // Info row
   const InfoRow = ({
     label,
     value,
@@ -128,6 +124,15 @@ export default function ContactDetail() {
       {icon}
     </View>
   );
+
+  // Dialer
+  const openDialer = (raw?: string) => {
+    if (!raw) return Alert.alert("No phone", "This contact has no phone number.");
+    const url = `tel:${raw}`;
+    Linking.openURL(url).catch(() =>
+      Alert.alert("Error", "Could not open dialer.")
+    );
+  };
 
   const handleSaveToDevice = async () => {
     const { status } = await Contacts.requestPermissionsAsync();
@@ -169,7 +174,7 @@ export default function ContactDetail() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
-        {/* Flip card */}
+        {/* Flip area (avatar, name, etc.) */}
         <Pressable onPress={flipCard} className="mt-6 mx-4">
           <View style={{ alignItems: "center", height: frontHeight }}>
             {/* Front */}
@@ -177,15 +182,18 @@ export default function ContactDetail() {
               style={[
                 styles.card,
                 {
-                  transform: [{ rotateY: frontInterpolate }],
+                  backgroundColor: "#F9FAFB", // very light gray
+                  transform: [{ perspective: 1000 }, { rotateY: frontInterpolate }],
                   backfaceVisibility: "hidden",
                   position: "absolute",
                   width: "100%",
                 },
               ]}
-              onLayout={(e) => setFrontHeight(e.nativeEvent.layout.height)}
             >
-              <View className="w-20 h-20 rounded-full items-center justify-center shadow" style={{ backgroundColor: "#E5E7EB" }}>
+              <View
+                className="w-20 h-20 rounded-full items-center justify-center shadow"
+                style={{ backgroundColor: "#E5E7EB" }}
+              >
                 <Text className="text-xl font-bold" style={{ color: BRAND_BLUE }}>
                   {initials}
                 </Text>
@@ -199,11 +207,12 @@ export default function ContactDetail() {
                 </Text>
               )}
               {!!position && (
-                <Text className="text-sm" style={{ color: GRAY_TEXT }}>
-                  {position}
-                </Text>
+                <Text style={{ color: GRAY_TEXT, marginTop: 4 }}>{position}</Text>
               )}
-              {!!phone && <Text style={{ color: GRAY_TEXT }}>{phone}</Text>}
+              {/* ✅ Phone just for display */}
+              {!!phone && (
+                <Text style={{ color: GRAY_TEXT, marginTop: 4 }}>{phone}</Text>
+              )}
             </Animated.View>
 
             {/* Back */}
@@ -211,7 +220,8 @@ export default function ContactDetail() {
               style={[
                 styles.card,
                 {
-                  transform: [{ rotateY: backInterpolate }],
+                  backgroundColor: "#E5E7EB", // medium gray for contrast
+                  transform: [{ perspective: 1000 }, { rotateY: backInterpolate }],
                   backfaceVisibility: "hidden",
                   position: "absolute",
                   width: "100%",
@@ -258,7 +268,7 @@ export default function ContactDetail() {
                   notes,
                   nickname,
                   position,
-                  additionalPhones: parsedAdditionalPhones.join(","), // pass as CSV
+                  additionalPhones: parsedAdditionalPhones.join(","),
                   _id,
                   cardImage: cardImage || "",
                 },
@@ -272,9 +282,34 @@ export default function ContactDetail() {
 
         {/* Info Section */}
         <View className="mt-6 mx-4 p-4 rounded-xl shadow bg-white border border-gray-200">
-          <Text style={{ fontSize: 12, textAlign: "center", color: GRAY_LABEL, marginBottom: 12 }}>
+          <Text
+            style={{ fontSize: 12, textAlign: "center", color: GRAY_LABEL, marginBottom: 12 }}
+          >
             Card saved at: {createdAt ? new Date(createdAt).toLocaleString() : "N/A"}
           </Text>
+
+          {/* ✅ Mobile field */}
+          {phone ? (
+            <InfoRow
+              label="Mobile"
+              value={phone}
+              icon={
+                <TouchableOpacity
+                  onPress={() => openDialer(phone)}
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
+                    backgroundColor: "#e5e7eb",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <FontAwesome name="phone" size={16} color={BRAND_BLUE} />
+                </TouchableOpacity>
+              }
+            />
+          ) : null}
 
           <InfoRow
             label="Email"
@@ -297,7 +332,7 @@ export default function ContactDetail() {
             icon={<MaterialIcons name="sticky-note-2" size={20} color={BRAND_BLUE} />}
           />
 
-          {/* Additional Phones */}
+          {/* ✅ Additional phones */}
           {parsedAdditionalPhones.length > 0 ? (
             <View style={{ marginTop: 12 }}>
               <Text style={{ fontSize: 12, color: GRAY_LABEL, marginBottom: 6 }}>
@@ -316,7 +351,19 @@ export default function ContactDetail() {
                   }}
                 >
                   <Text style={{ fontSize: 15, color: GRAY_TEXT }}>{p}</Text>
-                  <FontAwesome name="phone" size={16} color={BRAND_BLUE} />
+                  <TouchableOpacity
+                    onPress={() => openDialer(p)}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 16,
+                      backgroundColor: "#e5e7eb",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <FontAwesome name="phone" size={16} color={BRAND_BLUE} />
+                  </TouchableOpacity>
                 </View>
               ))}
             </View>
@@ -331,16 +378,17 @@ export default function ContactDetail() {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: LIGHT_BG,
-    borderRadius: 16,
-    padding: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    width: "100%",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 3,
-    minHeight: 180,
-  },
+  borderRadius: 16,
+  padding: 24,
+  alignItems: "center",
+  justifyContent: "center",
+  width: "100%",
+  shadowColor: "#000",
+  shadowOpacity: 0.15,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 6 },
+  elevation: 5,
+  minHeight: 180,
+},
+
 });

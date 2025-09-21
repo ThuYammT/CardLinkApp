@@ -146,11 +146,21 @@ export default function AddContactScreen() {
         throw new Error("Could not load contacts for duplicate check");
       }
  
-      const duplicate = existing.find(
-        (c: any) =>
-          (c.email && contactToSave.email && c.email === contactToSave.email) ||
-          (c.phone && contactToSave.phone && c.phone === contactToSave.phone)
-      );
+      // helper to normalize values
+      const normalize = (s: string) => (s || "").trim().toLowerCase();
+
+      const duplicate = existing.find((c: any) => {
+        const sameEmail =
+          c.email && contactToSave.email && normalize(c.email) === normalize(contactToSave.email);
+        const samePhone =
+          c.phone && contactToSave.phone && normalize(c.phone) === normalize(contactToSave.phone);
+        const sameName =
+          normalize(c.firstName) === normalize(contactToSave.firstName) &&
+          normalize(c.lastName) === normalize(contactToSave.lastName);
+
+        return sameEmail || samePhone || sameName;
+      });
+
  
       if (duplicate) {
         Alert.alert(
@@ -368,7 +378,7 @@ export default function AddContactScreen() {
           onPress={() => {
             if (ocrResult) {
               router.push({
-                pathname: "/manual-fill",
+                pathname:"/manual-fill",
                 params: {
                   contact: JSON.stringify(contact),
                   ocrData: JSON.stringify(ocrResult),
