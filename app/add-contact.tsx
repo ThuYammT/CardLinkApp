@@ -20,28 +20,28 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
- 
+
 const BRAND_BLUE = "#213BBB";
- 
+
 /* ---------- Param Helpers ---------- */
 function useParamString(name: string): string {
   const params = useLocalSearchParams<{ imageUri?: string | string[]; contact?: string }>();
   const value = params[name as keyof typeof params];
   return Array.isArray(value) ? value[0] : value ?? "";
 }
- 
+
 /* ---------- Component ---------- */
 export default function AddContactScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
- 
+
   const imageUri = useParamString("imageUri");
   const contactParam = useParamString("contact");
- 
+
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState<any>(null);
- 
+
   const [contact, setContact] = useState({
     firstName: "",
     lastName: "",
@@ -55,7 +55,7 @@ export default function AddContactScreen() {
     additionalPhones: [] as string[],
     cardImage: imageUri || "",
   });
- 
+
   // parse prefilled contact if passed
   useEffect(() => {
     if (contactParam) {
@@ -67,18 +67,18 @@ export default function AddContactScreen() {
       }
     }
   }, [contactParam]);
- 
+
   useLayoutEffect(() => {
     // @ts-ignore
     navigation.setOptions?.({ headerShown: false });
   }, [navigation]);
- 
+
   /* ---------- OCR ---------- */
   useEffect(() => {
     if (imageUri) handleOCR(imageUri);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageUri]);
- 
+
   const handleOCR = async (cloudinaryUrl: string) => {
     try {
       setOcrLoading(true);
@@ -91,15 +91,15 @@ export default function AddContactScreen() {
         },
         body: JSON.stringify({ imageUrl: cloudinaryUrl }),
       });
- 
+
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "OCR failed");
- 
+
       console.log("✅ OCR result:", data);
- 
+
       const parsed = data.parsed || {};
       setOcrResult(data);
- 
+
       setContact((prev) => ({
         ...prev,
         firstName: parsed.firstName?.value || "",
@@ -123,30 +123,30 @@ export default function AddContactScreen() {
       setOcrLoading(false);
     }
   };
- 
+
   /* ---------- Save ---------- */
   const handleSave = async () => {
     if (ocrLoading) return;
- 
+
     const token = await SecureStore.getItemAsync("userToken");
     if (!token) {
       Alert.alert("Error", "No token found. Please log in again.");
       return;
     }
- 
+
     const contactToSave = { ...contact };
- 
+
     try {
       const resAll = await fetch("https://cardlink.onrender.com/api/contacts", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const existing = await resAll.json();
- 
+
       if (!resAll.ok || !Array.isArray(existing)) {
         throw new Error("Could not load contacts for duplicate check");
       }
- 
-      // helper to normalize values
+
+      // normalize helper (from your friend’s version)
       const normalize = (s: string) => (s || "").trim().toLowerCase();
 
       const duplicate = existing.find((c: any) => {
@@ -161,7 +161,6 @@ export default function AddContactScreen() {
         return sameEmail || samePhone || sameName;
       });
 
- 
       if (duplicate) {
         Alert.alert(
           "Duplicate Contact Found",
@@ -179,7 +178,7 @@ export default function AddContactScreen() {
       Alert.alert("Error", err.message || "Could not save contact");
     }
   };
- 
+
   const actuallySave = async (token: string, contactToSave: any) => {
     try {
       const res = await fetch("https://cardlink.onrender.com/api/contacts", {
@@ -201,7 +200,7 @@ export default function AddContactScreen() {
       Alert.alert("Network Error", "Could not connect to server");
     }
   };
- 
+
   const replaceContact = async (token: string, id: string, newData: any) => {
     try {
       const res = await fetch(`https://cardlink.onrender.com/api/contacts/${id}`, {
@@ -223,13 +222,13 @@ export default function AddContactScreen() {
       Alert.alert("Network Error", "Could not connect to server");
     }
   };
- 
+
   const updateAdditionalPhone = (index: number, value: string) => {
     const updated = [...contact.additionalPhones];
     updated[index] = value;
     setContact({ ...contact, additionalPhones: updated });
   };
- 
+
   /* ---------- UI ---------- */
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#f6f7fb" }}>
@@ -249,7 +248,7 @@ export default function AddContactScreen() {
         </TouchableOpacity>
         <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>Add Contact</Text>
       </View>
- 
+
       <KeyboardAvoidingView
         behavior={Platform.select({ ios: "padding", android: undefined })}
         style={{ flex: 1 }}
@@ -291,12 +290,12 @@ export default function AddContactScreen() {
                   }}
                 >
                   <ActivityIndicator size="large" color={BRAND_BLUE} />
-                  <Text style={{ color: "#334155", fontWeight: "600" }}>Processing OCR…</Text>
+                  <Text style={{ color: "#334155", fontWeight: "600" }}>Processing…</Text>
                 </View>
               )}
             </View>
           ) : null}
- 
+
           {/* Form */}
           <FormSection title="Identity">
             <Row two>
@@ -306,9 +305,9 @@ export default function AddContactScreen() {
             <Input label="Nickname" value={contact.nickname} onChangeText={(v) => setContact({ ...contact, nickname: v })} icon="id-badge" />
             <Input label="Position" value={contact.position} onChangeText={(v) => setContact({ ...contact, position: v })} icon="briefcase" />
           </FormSection>
- 
+
           <Divider />
- 
+
           <FormSection title="Contact">
             <Input label="Phone Number" keyboardType="phone-pad" value={contact.phone} onChangeText={(v) => setContact({ ...contact, phone: v })} icon="phone" />
             {contact.additionalPhones.map((num, idx) => (
@@ -326,16 +325,16 @@ export default function AddContactScreen() {
             </TouchableOpacity>
             <Input label="Email" keyboardType="email-address" autoCapitalize="none" value={contact.email} onChangeText={(v) => setContact({ ...contact, email: v })} icon="envelope-o" />
           </FormSection>
- 
+
           <Divider />
- 
+
           <FormSection title="Company">
             <Input label="Company" value={contact.company} onChangeText={(v) => setContact({ ...contact, company: v })} icon="building-o" />
             <Input label="Website" autoCapitalize="none" keyboardType="url" value={contact.website} onChangeText={(v) => setContact({ ...contact, website: v })} icon="globe" />
           </FormSection>
- 
+
           <Divider />
- 
+
           <FormSection title="Notes">
             <TextInput
               placeholder="Additional Notes"
@@ -358,7 +357,7 @@ export default function AddContactScreen() {
           </FormSection>
         </ScrollView>
       </KeyboardAvoidingView>
- 
+
       {/* Sticky Save Bar */}
       <View
         style={{
@@ -378,7 +377,7 @@ export default function AddContactScreen() {
           onPress={() => {
             if (ocrResult) {
               router.push({
-                pathname:"/manual-fill",
+                pathname: "/manual-fill",
                 params: {
                   contact: JSON.stringify(contact),
                   ocrData: JSON.stringify(ocrResult),
@@ -409,7 +408,7 @@ export default function AddContactScreen() {
             Manual Fill
           </Text>
         </TouchableOpacity>
- 
+
         <TouchableOpacity
           onPress={handleSave}
           disabled={ocrLoading}
@@ -436,7 +435,7 @@ export default function AddContactScreen() {
     </SafeAreaView>
   );
 }
- 
+
 /* ---------- Small UI Bits ---------- */
 function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (

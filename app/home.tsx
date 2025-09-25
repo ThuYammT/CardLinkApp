@@ -75,7 +75,14 @@ export default function HomeScreen() {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       const data = await res.json();
-      if (Array.isArray(data)) setRecentContacts(data.slice(0, 4));
+      if (Array.isArray(data)) {
+        const sorted = [...data].sort((a, b) => {
+          if (a.isFavorite && !b.isFavorite) return -1;
+          if (!a.isFavorite && b.isFavorite) return 1;
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        });
+        setRecentContacts(sorted.slice(0, 4));
+      }
     } catch (e) {
       console.error("Failed to fetch recent contacts:", e);
     }
@@ -244,7 +251,7 @@ export default function HomeScreen() {
             onDelete={() => confirmDelete(c._id)}
             hasPhone={getAllNumbers(c).length > 0}
           >
-            <TouchableOpacity
+            <Pressable
               onPress={() =>
                 router.push({
                   pathname: "/contact-detail",
@@ -284,6 +291,7 @@ export default function HomeScreen() {
                   minHeight: 108,
                 }}
               >
+                {/* Top row with initials, name/nickname, favorite star */}
                 <View className="flex-row items-center">
                   <View className="w-10 h-10 bg-blue-200 rounded-full justify-center items-center">
                     <Text className="text-white font-bold text-sm">
@@ -293,12 +301,26 @@ export default function HomeScreen() {
                   </View>
 
                   <View className="ml-3 flex-1">
-                    <Text className="text-xl font-bold text-blue-900 font-nunito">
-                      {c.firstName} {c.lastName}
-                    </Text>
-                    {!!c.nickname && <Text className="text-xs text-gray-500">{c.nickname}</Text>}
+                    {c.nickname ? (
+                      <>
+                        {/* Nickname as main */}
+                        <Text className="text-xl font-bold text-blue-900 font-nunito">
+                          {c.nickname}
+                        </Text>
+                        {/* Full name as subtitle */}
+                        <Text className="text-xs text-gray-500">
+                          {c.firstName} {c.lastName}
+                        </Text>
+                      </>
+                    ) : (
+                      // No nickname → show full name as main
+                      <Text className="text-xl font-bold text-blue-900 font-nunito">
+                        {c.firstName} {c.lastName}
+                      </Text>
+                    )}
                   </View>
 
+                  {/* Favorite star */}
                   <TouchableOpacity
                     onPress={() => toggleFavorite(c)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -321,6 +343,7 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 </View>
 
+                {/* Contact details */}
                 <View className="mt-3">
                   <View className="flex-row items-center mb-1">
                     <FontAwesome name="phone" size={14} color={ICON_BLUE} />
@@ -336,7 +359,7 @@ export default function HomeScreen() {
                   </View>
                 </View>
               </View>
-            </TouchableOpacity>
+            </Pressable>
           </AnimatedSwipeableRow>
         ))}
       </ScrollView>

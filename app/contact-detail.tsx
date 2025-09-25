@@ -1,4 +1,4 @@
-// app/contact-detail.tsx 
+// app/contact-detail.tsx
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
 import * as Contacts from "expo-contacts";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -59,7 +59,7 @@ export default function ContactDetail() {
 
   const initials = `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
 
-  // normalize additionalPhones
+  // ✅ normalize additionalPhones into a clean string[]
   const parsedAdditionalPhones: string[] = useMemo(() => {
     if (Array.isArray(additionalPhonesRaw)) {
       return additionalPhonesRaw.map((s) => String(s)).filter(Boolean);
@@ -71,7 +71,9 @@ export default function ContactDetail() {
       const js = JSON.parse(raw);
       if (Array.isArray(js)) return js.map((x) => String(x)).filter(Boolean);
       if (typeof js === "string") return [js];
-    } catch {}
+    } catch {
+      // ignore
+    }
 
     return raw
       .split(",")
@@ -84,13 +86,13 @@ export default function ContactDetail() {
   const [flipped, setFlipped] = useState(false);
 
   const flipCard = () => {
-  Animated.timing(flipAnim, {
-    toValue: flipped ? 0 : 1,
-    duration: 600,
-    easing: Easing.inOut(Easing.ease),
-    useNativeDriver: true,
-  }).start(() => setFlipped(!flipped));
-};
+    Animated.timing(flipAnim, {
+      toValue: flipped ? 0 : 1,
+      duration: 600,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: true,
+    }).start(() => setFlipped(!flipped));
+  };
 
   const frontInterpolate = flipAnim.interpolate({
     inputRange: [0, 1],
@@ -174,7 +176,7 @@ export default function ContactDetail() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
-        {/* Flip area (avatar, name, etc.) */}
+        {/* Flip area */}
         <Pressable onPress={flipCard} className="mt-6 mx-4">
           <View style={{ alignItems: "center", height: frontHeight }}>
             {/* Front */}
@@ -182,18 +184,17 @@ export default function ContactDetail() {
               style={[
                 styles.card,
                 {
-                  backgroundColor: "#F9FAFB", // very light gray
+                  backgroundColor: LIGHT_BG,
                   transform: [{ perspective: 1000 }, { rotateY: frontInterpolate }],
                   backfaceVisibility: "hidden",
                   position: "absolute",
                   width: "100%",
                 },
               ]}
+              onLayout={(e) => setFrontHeight(e.nativeEvent.layout.height)}
             >
-              <View
-                className="w-20 h-20 rounded-full items-center justify-center shadow"
-                style={{ backgroundColor: "#E5E7EB" }}
-              >
+              <View className="w-20 h-20 rounded-full items-center justify-center shadow"
+                style={{ backgroundColor: "#E5E7EB" }}>
                 <Text className="text-xl font-bold" style={{ color: BRAND_BLUE }}>
                   {initials}
                 </Text>
@@ -209,7 +210,6 @@ export default function ContactDetail() {
               {!!position && (
                 <Text style={{ color: GRAY_TEXT, marginTop: 4 }}>{position}</Text>
               )}
-              {/* ✅ Phone just for display */}
               {!!phone && (
                 <Text style={{ color: GRAY_TEXT, marginTop: 4 }}>{phone}</Text>
               )}
@@ -220,7 +220,7 @@ export default function ContactDetail() {
               style={[
                 styles.card,
                 {
-                  backgroundColor: "#E5E7EB", // medium gray for contrast
+                  backgroundColor: "#E5E7EB",
                   transform: [{ perspective: 1000 }, { rotateY: backInterpolate }],
                   backfaceVisibility: "hidden",
                   position: "absolute",
@@ -282,9 +282,7 @@ export default function ContactDetail() {
 
         {/* Info Section */}
         <View className="mt-6 mx-4 p-4 rounded-xl shadow bg-white border border-gray-200">
-          <Text
-            style={{ fontSize: 12, textAlign: "center", color: GRAY_LABEL, marginBottom: 12 }}
-          >
+          <Text style={{ fontSize: 12, textAlign: "center", color: GRAY_LABEL, marginBottom: 12 }}>
             Card saved at: {createdAt ? new Date(createdAt).toLocaleString() : "N/A"}
           </Text>
 
@@ -378,17 +376,16 @@ export default function ContactDetail() {
 
 const styles = StyleSheet.create({
   card: {
-  borderRadius: 16,
-  padding: 24,
-  alignItems: "center",
-  justifyContent: "center",
-  width: "100%",
-  shadowColor: "#000",
-  shadowOpacity: 0.15,
-  shadowRadius: 10,
-  shadowOffset: { width: 0, height: 6 },
-  elevation: 5,
-  minHeight: 180,
-},
-
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
+    minHeight: 180,
+  },
 });

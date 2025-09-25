@@ -3,13 +3,11 @@ import React, { ReactNode } from "react";
 import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-
-// ✅ use scheduleOnRN (replaces runOnJS)
-import { scheduleOnRN } from "react-native-worklets";
 
 const { width } = Dimensions.get("window");
 const SWIPE_THRESHOLD = width * 0.25;
@@ -35,9 +33,9 @@ export default function AnimatedSwipeableRow({
     })
     .onEnd((e) => {
       if (e.translationX > SWIPE_THRESHOLD) {
-        scheduleOnRN(onCall);
+        runOnJS(onCall)();
       } else if (e.translationX < -SWIPE_THRESHOLD) {
-        scheduleOnRN(onDelete);
+        runOnJS(onDelete)();
       }
       translateX.value = withSpring(0);
     });
@@ -62,7 +60,10 @@ export default function AnimatedSwipeableRow({
   );
 
   const RightActions = () => (
-    <TouchableOpacity onPress={onDelete} style={styles.rightAction}>
+    <TouchableOpacity
+      onPress={onDelete}
+      style={styles.rightAction}
+    >
       <FontAwesome name="trash" size={20} color="white" />
       <Text style={{ color: "white", marginTop: 4 }}>Delete</Text>
     </TouchableOpacity>
@@ -70,15 +71,14 @@ export default function AnimatedSwipeableRow({
 
   return (
     <View style={styles.container}>
-      {/* Background actions */}
       <View style={styles.actionContainer}>
         <LeftActions />
         <RightActions />
       </View>
-
-      {/* Foreground content */}
       <GestureDetector gesture={panGesture}>
-        <Animated.View style={animatedStyle}>{children}</Animated.View>
+        <Animated.View style={animatedStyle}>
+          {children}
+        </Animated.View>
       </GestureDetector>
     </View>
   );

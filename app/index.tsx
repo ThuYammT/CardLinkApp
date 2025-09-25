@@ -1,9 +1,7 @@
-import { useEffect } from 'react';
-import { router } from 'expo-router';
+// app/index.tsx
+//pull shark
+import { Redirect } from "expo-router";
 
 export default function Index() {
-  useEffect(() => {
-    router.replace('/splash');
-  }, []);
-  return null;
+  return <Redirect href="/Onboarding" />;
 }

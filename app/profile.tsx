@@ -7,11 +7,11 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import {
   Alert,
   Image,
-  SafeAreaView,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const BRAND_BLUE = "#213BBB";
 const CARD_BG = "#FFFFFF";
@@ -81,7 +81,7 @@ export default function Profile() {
           style={{ width: 96, height: 96, borderRadius: 48 }}
         />
         <Text style={{ color: TEXT_PRIMARY }} className="text-lg mt-3 font-nunito font-semibold">
-          {user.name || "USER1"}
+          {user.name || "—"}
         </Text>
         <Text style={{ color: TEXT_SECONDARY }} className="text-sm font-nunito">
           {user.email || "—"}
@@ -105,7 +105,7 @@ export default function Profile() {
                 style: "destructive",
                 onPress: async () => {
                   await SecureStore.deleteItemAsync("userToken");
-                  router.replace("/login");
+                  router.replace("/auth");
                 },
               },
             ])
