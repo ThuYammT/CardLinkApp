@@ -1,10 +1,11 @@
 // app/_layout.tsx
-import "react-native-gesture-handler"; // 👈 MUST be first
-import "react-native-reanimated"; // 👈 then Reanimated
+import "react-native-gesture-handler";
+import "react-native-reanimated";
 
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
-import React from "react";
+import { Stack, useRouter } from "expo-router";
+import React, { useEffect } from "react";
+import * as Linking from "expo-linking";
 import {
   ActivityIndicator,
   Image,
@@ -14,15 +15,46 @@ import {
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import "./globals.css"; // Tailwind / NativeWind CSS
+import "./globals.css";
 
 const BRAND_BLUE = "#213BBB";
 
 export default function RootLayout() {
+  const router = useRouter();
   const [fontsLoaded] = useFonts({
     Nunito: require("../assets/fonts/Nunito-Regular.ttf"),
-    // NunitoBold: require("../assets/fonts/Nunito-Bold.ttf"),
   });
+
+  // ✅ Handle incoming deep links
+  useEffect(() => {
+    const handleDeepLink = ({ url }: { url: string }) => {
+      console.log("🔗 Deep link received:", url);
+      const parsed = Linking.parse(url);
+      const path = parsed.path;
+      const token = parsed.queryParams?.token;
+
+      if (path === "reset-password" && token) {
+        router.push(`/reset-password?token=${token}`);
+      }
+    };
+
+    // Subscribe to link events while app is open
+    const subscription = Linking.addEventListener("url", handleDeepLink);
+
+    // ✅ Fix: Prevent app from reopening directly to reset-password on cold start
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        if (url.includes("reset-password")) {
+          console.log("🧹 Clearing cached deep link...");
+          router.replace("/auth"); // or "/home" if already logged in
+        } else {
+          handleDeepLink({ url });
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -36,7 +68,7 @@ export default function RootLayout() {
           }}
         />
 
-        {/* Loader (blocking until fonts load) */}
+        {/* Loader while fonts load */}
         {!fontsLoaded && (
           <View
             style={{

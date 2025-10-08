@@ -339,18 +339,22 @@ export default function AuthScreen() {
             )}
 
             {isLogin && (
+            <Pressable onPress={() => router.push("/forgot-password")}>
               <Text
                 style={{
                   textAlign: "right",
-                  color: TEXT_MUTED,
+                  color: BRAND,
                   fontFamily: "Nunito",
                   marginTop: 4,
                   marginBottom: 8,
+                  fontWeight: "600",
                 }}
               >
                 Forgot password?
               </Text>
-            )}
+            </Pressable>
+          )}
+
 
             {/* CTA */}
             <Animated.View style={{ transform: [{ scale: ctaScale }] }}>

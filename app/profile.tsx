@@ -91,8 +91,7 @@ export default function Profile() {
       {/* Info Rows */}
       <View className="mt-8 px-4">
         <RowButton icon="pencil" label="Edit Profile" onPress={() => router.push("/edit-profile")} />
-        <RowStatic icon="briefcase" label="Business Detail" />
-        <RowStatic icon="user" label="Account" />
+        <RowButton icon="user" label="Account" onPress={() => router.push("/edit-account")} />
         <RowButton
           icon="sign-out"
           label="Log Out"
