@@ -6,6 +6,7 @@ import { useFonts } from "expo-font";
 import { Stack, useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import * as Linking from "expo-linking";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Image,
@@ -25,7 +26,7 @@ export default function RootLayout() {
     Nunito: require("../assets/fonts/Nunito-Regular.ttf"),
   });
 
-  // ✅ Handle incoming deep links
+  // ✅ Deep link handler
   useEffect(() => {
     const handleDeepLink = ({ url }: { url: string }) => {
       console.log("🔗 Deep link received:", url);
@@ -34,22 +35,35 @@ export default function RootLayout() {
       const token = parsed.queryParams?.token;
 
       if (path === "reset-password" && token) {
+        console.log("➡️ Navigating to reset-password with token");
         router.push(`/reset-password?token=${token}`);
       }
     };
 
-    // Subscribe to link events while app is open
+    // ✅ When the app is already open
     const subscription = Linking.addEventListener("url", handleDeepLink);
 
-    // ✅ Fix: Prevent app from reopening directly to reset-password on cold start
-    Linking.getInitialURL().then((url) => {
-      if (url) {
-        if (url.includes("reset-password")) {
-          console.log("🧹 Clearing cached deep link...");
-          router.replace("/auth"); // or "/home" if already logged in
-        } else {
-          handleDeepLink({ url });
-        }
+    // ✅ Handle app opened from cold start (first open)
+    Linking.getInitialURL().then(async (url) => {
+      if (!url) return;
+
+      console.log("🌐 Initial URL:", url);
+
+      // Check if this deep link was already handled
+      const alreadyHandled = await AsyncStorage.getItem("handledDeepLink");
+      if (alreadyHandled === url) {
+        console.log("🧹 Deep link already handled, skipping...");
+        return;
+      }
+
+      // Detect reset link pattern
+      if (url.includes("reset-password") && url.includes("token=")) {
+        handleDeepLink({ url });
+
+        // Mark as handled so next cold start won't reopen this
+        await AsyncStorage.setItem("handledDeepLink", url);
+      } else {
+        handleDeepLink({ url });
       }
     });
 
